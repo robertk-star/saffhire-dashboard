@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { requireUser } from "@/lib/session";
+import { writeAuditLog } from "@/lib/audit";
 
 export const runtime = "nodejs";
-
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   const { id } = await context.params;
@@ -17,5 +17,6 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (insertError) throw insertError;
   const { error: updateError } = await supabase.from("cases").update({ status: nextStatus, updated_at: new Date().toISOString() }).eq("id", id);
   if (updateError) throw updateError;
+  await writeAuditLog({ user, action: "review_decision_saved", entityType: "case", entityId: id, metadata: { decision, nextStatus } });
   return NextResponse.redirect(new URL(`/cases/${id}`, request.url), 303);
 }

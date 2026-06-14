@@ -1,27 +1,10 @@
 import { AppHeader } from "@/components/AppHeader";
+import { listDocuments } from "@/lib/documents";
 import { requireUser } from "@/lib/session";
 
-export default async function DocumentsPage() {
+export default async function DocumentsPage({ searchParams }: { searchParams: Promise<{ uploaded?: string; error?: string }> }) {
   const user = await requireUser();
-  return (
-    <>
-      <AppHeader user={user} />
-      <main className="container-shell">
-        <h1 style={{ marginTop: 0 }}>Document Library</h1>
-        <section className="card" style={{ padding: 22 }}>
-          <h2 style={{ marginTop: 0 }}>Phase 1A Placeholder</h2>
-          <p style={{ color: "#5d687b", lineHeight: 1.5 }}>
-            Admin-only PDF upload, document versioning, searchable chunks, and citation-backed AI review are planned for Phase 1B.
-          </p>
-          <ul style={{ lineHeight: 1.8 }}>
-            <li>SaffHire SOPs</li>
-            <li>Federal FCRA references</li>
-            <li>Court review procedures</li>
-            <li>National database review procedures</li>
-            <li>Training examples</li>
-          </ul>
-        </section>
-      </main>
-    </>
-  );
+  const params = await searchParams;
+  const docs = await listDocuments();
+  return <><AppHeader user={user} /><main className="container-shell"><h1 style={{ marginTop: 0 }}>Document Library</h1><p style={{ color: "#5d687b" }}>Admin-only PDF upload for AI review citations.</p>{params.uploaded ? <p style={{ color: "#167f49", fontWeight: 700 }}>Document uploaded and chunked.</p> : null}{params.error ? <p style={{ color: "#b42318", fontWeight: 700 }}>Upload failed. Check that the file is a readable PDF and the storage bucket exists.</p> : null}{user.role === "admin" ? <form action="/api/documents/upload" method="post" encType="multipart/form-data" className="card" style={{ display: "grid", gap: 16, marginBottom: 22, padding: 22 }}><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}><label><span className="field-label">Document name</span><input className="field-input" name="document_name" required /></label><label><span className="field-label">Document type</span><select className="field-input" name="document_type"><option value="saffhire_sop">SaffHire SOP</option><option value="fcra_reference">Federal FCRA Reference</option><option value="court_review_policy">Court Review Policy</option><option value="national_database_policy">National Database Policy</option><option value="training_example">Training Example</option><option value="other">Other</option></select></label></div><label><span className="field-label">PDF file</span><input className="field-input" type="file" name="pdf" accept="application/pdf" required /></label><label><span className="field-label">Notes</span><textarea className="field-input" name="notes" style={{ minHeight: 100 }} /></label><button className="btn-primary" type="submit">Upload PDF</button></form> : null}<section className="card table-wrap"><table><thead><tr><th>Name</th><th>Type</th><th>Versions</th><th>Uploaded</th></tr></thead><tbody>{docs.length ? docs.map((doc: any) => <tr key={doc.id}><td>{doc.document_name}</td><td>{doc.document_type}</td><td>{doc.document_versions?.length || 0}</td><td>{new Date(doc.created_at).toLocaleString()}</td></tr>) : <tr><td colSpan={4}>No documents uploaded yet.</td></tr>}</tbody></table></section></main></>;
 }

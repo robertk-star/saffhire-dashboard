@@ -1,7 +1,9 @@
+import { hasDbConfig } from "@/lib/env";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
-import type { SessionUser } from "@/lib/users";
+import type { SessionUser } from "@/lib/types";
 
-export async function writeAuditLog(input: { user: SessionUser | null; action: string; entityType?: string; entityId?: string }) {
+export async function writeAuditLog(input: { user: SessionUser | null; action: string; entityType?: string; entityId?: string; metadata?: Record<string, unknown> }) {
+  if (!hasDbConfig()) return;
   try {
     const supabase = getSupabaseAdmin();
     await supabase.from("audit_logs").insert({
@@ -10,9 +12,7 @@ export async function writeAuditLog(input: { user: SessionUser | null; action: s
       action: input.action,
       entity_type: input.entityType || null,
       entity_id: input.entityId || null,
-      metadata: {},
+      metadata: input.metadata || {},
     });
-  } catch {
-    return;
-  }
+  } catch { return; }
 }

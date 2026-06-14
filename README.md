@@ -1,41 +1,36 @@
-# SaffHire Dashboard — Phase 1A
+# SaffHire Dashboard — Phase 1B
 
-Private internal SaffHire review dashboard foundation.
+Private internal SaffHire review dashboard.
 
-## Phase 1A includes
+## Phase 1B includes
 
-- Simple private login
-- Admin, reviewer, and supervisor roles
-- Dashboard shell
-- Case list
-- Create case form
-- Copy/paste criminal court or national database record text
-- Case detail page
-- Human decision buttons
-- Supervisor review queue
-- Document library placeholder
-- Admin users page
-- Admin audit logs page
-- Soft archive and admin-only soft delete
-- Supabase SQL migration
-- OpenAI placeholder for Phase 1B
-- TazWorks placeholder for later phase
+- Phase 1A private login and case review foundation
+- Admin-only PDF upload
+- Private document library
+- PDF text extraction
+- Document chunk storage for AI retrieval
+- OpenAI case review route
+- AI review panel on case detail pages
+- Citation-style source output
+- Supervisor routing when AI flags review needed
+- Real audit-log table page
+- Cleanup of temporary Phase 1A test files
 
-## Phase 1A does not include yet
+## Still not included
 
-- OpenAI review
-- PDF upload and extraction
-- Citation-backed AI answers
 - TazWorks live connection
-- Client portal
 - Client-specific rule engine
+- Client portal
+- Automatic report changes
+- Automatic client/employer notifications
 
-## SQL migration
+## SQL migrations
 
-Run this file in Supabase SQL Editor before testing case save:
+Run both migration files in Supabase SQL Editor:
 
 ```text
 supabase/migrations/001_phase_1a_private_foundation.sql
+supabase/migrations/002_phase_1b_documents_ai_review.sql
 ```
 
 ## Local development
@@ -51,6 +46,6 @@ pnpm dev
 pnpm build
 ```
 
-## Important security note
+## Security note
 
-Phase 1A uses simple environment-variable based login. Use strong credentials and long random session values. For production use by more staff, move to database-managed users or Supabase Auth in a later phase.
+This is an internal staff review app. AI output is guidance only. A SaffHire reviewer must make the final decision.

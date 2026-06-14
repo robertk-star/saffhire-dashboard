@@ -24,3 +24,4 @@ textarea { min-height: 220px; }
 table { border-collapse: collapse; width: 100%; }
 th, td { border-bottom: 1px solid #dce1ea; padding: 13px 12px; text-align: left; vertical-align: top; }
 th { color: #43546d; font-size: 13px; text-transform: uppercase; }
+pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
