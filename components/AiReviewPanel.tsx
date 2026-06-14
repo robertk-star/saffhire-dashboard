@@ -1,5 +1,24 @@
-function ListBlock({ title, items }: { title: string; items?: string[] }) {
-  return <div><strong>{title}</strong><ul style={{ lineHeight: 1.7, marginTop: 8 }}>{(items && items.length ? items : ["None listed."]).map((item, idx) => <li key={idx}>{item}</li>)}</ul></div>;
+function toText(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return value.map(toText).filter(Boolean).join("; ");
+  if (typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>);
+    return entries.map(([key, val]) => `${key}: ${toText(val)}`).join("; ");
+  }
+  return String(value);
+}
+
+function asList(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(toText).filter(Boolean);
+  const text = toText(value);
+  return text ? [text] : [];
+}
+
+function ListBlock({ title, items }: { title: string; items?: unknown }) {
+  const rows = asList(items);
+  return <div><strong>{title}</strong><ul style={{ lineHeight: 1.7, marginTop: 8 }}>{(rows.length ? rows : ["None listed."]).map((item, idx) => <li key={idx}>{item}</li>)}</ul></div>;
 }
 
 export function AiReviewPanel({ caseId, latestReview }: { caseId: string; latestReview: any }) {
@@ -11,7 +30,7 @@ export function AiReviewPanel({ caseId, latestReview }: { caseId: string; latest
         <form action={`/api/cases/${caseId}/ai-review`} method="post"><button className="btn-primary" type="submit">Run AI Review</button></form>
       </div>
       {!output ? <p style={{ color: "#5d687b" }}>No AI review has been run yet.</p> : <div style={{ display: "grid", gap: 18, marginTop: 18 }}>
-        <div><strong>Review Summary</strong><p style={{ lineHeight: 1.6 }}>{output.review_summary}</p></div>
+        <div><strong>Review Summary</strong><p style={{ lineHeight: 1.6 }}>{toText(output.review_summary) || "No summary provided."}</p></div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 18 }}>
           <ListBlock title="Identity / Match Concerns" items={output.identity_match_concerns} />
           <ListBlock title="Record Completeness" items={output.record_completeness} />
@@ -20,9 +39,9 @@ export function AiReviewPanel({ caseId, latestReview }: { caseId: string; latest
           <ListBlock title="Missing Information" items={output.missing_information} />
           <ListBlock title="Sources Used" items={output.sources_used} />
         </div>
-        <div className="card" style={{ background: "#f8fafc", padding: 16 }}><strong>Recommended Next Step</strong><p>{output.recommended_next_step}</p><p><strong>County verification needed:</strong> {output.county_verification_needed ? "Yes" : "No"}</p><p><strong>Supervisor review needed:</strong> {output.supervisor_review_needed ? "Yes" : "No"}</p><p><strong>Confidence:</strong> {typeof output.confidence === "number" ? `${Math.round(output.confidence * 100)}%` : "Not provided"}</p></div>
-        <div><strong>Draft Reviewer Note</strong><pre style={{ background: "#f8fafc", borderRadius: 12, padding: 16, whiteSpace: "pre-wrap" }}>{output.draft_reviewer_note}</pre></div>
-        {latestReview.ai_review_sources?.length ? <div><strong>Stored Source Excerpts</strong>{latestReview.ai_review_sources.map((source: any) => <pre key={source.id} style={{ background: "#f8fafc", borderRadius: 12, padding: 12, whiteSpace: "pre-wrap" }}>{source.source_label}\n{source.source_excerpt}</pre>)}</div> : null}
+        <div className="card" style={{ background: "#f8fafc", padding: 16 }}><strong>Recommended Next Step</strong><p>{toText(output.recommended_next_step) || "Not provided."}</p><p><strong>County verification needed:</strong> {output.county_verification_needed ? "Yes" : "No"}</p><p><strong>Supervisor review needed:</strong> {output.supervisor_review_needed ? "Yes" : "No"}</p><p><strong>Confidence:</strong> {typeof output.confidence === "number" ? `${Math.round(output.confidence * 100)}%` : toText(output.confidence) || "Not provided"}</p></div>
+        <div><strong>Draft Reviewer Note</strong><pre style={{ background: "#f8fafc", borderRadius: 12, padding: 16, whiteSpace: "pre-wrap" }}>{toText(output.draft_reviewer_note) || "No draft note provided."}</pre></div>
+        {latestReview.ai_review_sources?.length ? <div><strong>Stored Source Excerpts</strong>{latestReview.ai_review_sources.map((source: any) => <pre key={source.id} style={{ background: "#f8fafc", borderRadius: 12, padding: 12, whiteSpace: "pre-wrap" }}>{toText(source.source_label)}\n{toText(source.source_excerpt)}</pre>)}</div> : null}
       </div>}
     </section>
   );
