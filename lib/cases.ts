@@ -42,11 +42,21 @@ export async function listCases(status?: string) {
 }
 export async function getCaseBundle(id: string) {
   const supabase = getSupabaseAdmin();
-  const [{ data: item, error }, reviews, decisions] = await Promise.all([
-    supabase.from("cases").select("*").eq("id", id).maybeSingle(),
-    supabase.from("ai_reviews").select("*, ai_review_sources(*)").eq("case_id", id).order("created_at", { ascending: false }).limit(1),
-    supabase.from("review_decisions").select("*").eq("case_id", id).order("created_at", { ascending: false }).limit(20),
-  ]);
+  const { data: item, error } = await supabase.from("cases").select("*").eq("id", id).maybeSingle();
   if (error) throw error;
-  return { item, latestReview: reviews.data?.[0] || null, decisions: decisions.data || [] };
+  let latestReview: any = null;
+  let decisions: any[] = [];
+  try {
+    const reviews = await supabase.from("ai_reviews").select("*, ai_review_sources(*)").eq("case_id", id).order("created_at", { ascending: false }).limit(1);
+    latestReview = reviews.data?.[0] || null;
+  } catch {
+    latestReview = null;
+  }
+  try {
+    const decisionRows = await supabase.from("review_decisions").select("*").eq("case_id", id).order("created_at", { ascending: false }).limit(20);
+    decisions = decisionRows.data || [];
+  } catch {
+    decisions = [];
+  }
+  return { item, latestReview, decisions };
 }
