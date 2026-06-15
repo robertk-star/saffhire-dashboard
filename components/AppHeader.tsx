@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { SessionUser } from "@/lib/types";
 
 export function AppHeader({ user }: { user: SessionUser }) {
-  const navItems = [["Dashboard", "/dashboard"], ["Cases", "/cases"], ["Documents", "/documents"], ["Supervisor", "/supervisor"], ["TazWorks", "/tazworks"], ["Audit Logs", "/admin/audit-logs"], ["Settings", "/settings"]];
+  const navItems = [["Dashboard", "/dashboard"], ["Quick Analyze", "/analyze"], ["Cases", "/cases"], ["Documents", "/documents"], ["Supervisor", "/supervisor"], ["TazWorks", "/tazworks"], ["Audit Logs", "/admin/audit-logs"], ["Settings", "/settings"]];
   return (
     <div style={{ background: "#0f3b5f", color: "white" }}>
       <div style={{ alignItems: "center", display: "flex", gap: 18, justifyContent: "space-between", margin: "0 auto", maxWidth: 1180, padding: "16px 20px" }}>
