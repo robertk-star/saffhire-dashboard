@@ -1,48 +1,17 @@
-function toText(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  if (typeof value === "string") return value;
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-  if (Array.isArray(value)) return value.map(toText).filter(Boolean).join("; ");
-  if (typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>);
-    return entries.map(([key, val]) => `${key}: ${toText(val)}`).join("; ");
-  }
-  return String(value);
-}
-
-function asList(value: unknown): string[] {
-  if (Array.isArray(value)) return value.map(toText).filter(Boolean);
-  const text = toText(value);
-  return text ? [text] : [];
-}
-
-function ListBlock({ title, items }: { title: string; items?: unknown }) {
-  const rows = asList(items);
-  return <div><strong>{title}</strong><ul style={{ lineHeight: 1.7, marginTop: 8 }}>{(rows.length ? rows : ["None listed."]).map((item, idx) => <li key={idx}>{item}</li>)}</ul></div>;
-}
+import { AiResultView } from "@/components/AiResultView";
 
 export function AiReviewPanel({ caseId, latestReview }: { caseId: string; latestReview: any }) {
   const output = latestReview?.structured_output || null;
+  const sources = latestReview?.ai_review_sources || [];
   return (
     <section className="card" style={{ marginTop: 18, padding: 22 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center" }}>
         <div><h2 style={{ margin: 0 }}>AI Review Guidance</h2><p style={{ color: "#5d687b", marginBottom: 0 }}>Guidance only. Final decision requires SaffHire human review.</p></div>
         <form action={`/api/cases/${caseId}/ai-review`} method="post"><button className="btn-primary" type="submit">Run AI Review</button></form>
       </div>
-      {!output ? <p style={{ color: "#5d687b" }}>No AI review has been run yet.</p> : <div style={{ display: "grid", gap: 18, marginTop: 18 }}>
-        <div><strong>Review Summary</strong><p style={{ lineHeight: 1.6 }}>{toText(output.review_summary) || "No summary provided."}</p></div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 18 }}>
-          <ListBlock title="Identity / Match Concerns" items={output.identity_match_concerns} />
-          <ListBlock title="Record Completeness" items={output.record_completeness} />
-          <ListBlock title="Possible Reportability Issues" items={output.possible_reportability_issues} />
-          <ListBlock title="Possible FCRA / Compliance Concerns" items={output.possible_fcra_concerns} />
-          <ListBlock title="Missing Information" items={output.missing_information} />
-          <ListBlock title="Sources Used" items={output.sources_used} />
-        </div>
-        <div className="card" style={{ background: "#f8fafc", padding: 16 }}><strong>Recommended Next Step</strong><p>{toText(output.recommended_next_step) || "Not provided."}</p><p><strong>County verification needed:</strong> {output.county_verification_needed ? "Yes" : "No"}</p><p><strong>Supervisor review needed:</strong> {output.supervisor_review_needed ? "Yes" : "No"}</p><p><strong>Confidence:</strong> {typeof output.confidence === "number" ? `${Math.round(output.confidence * 100)}%` : toText(output.confidence) || "Not provided"}</p></div>
-        <div><strong>Draft Reviewer Note</strong><pre style={{ background: "#f8fafc", borderRadius: 12, padding: 16, whiteSpace: "pre-wrap" }}>{toText(output.draft_reviewer_note) || "No draft note provided."}</pre></div>
-        {latestReview.ai_review_sources?.length ? <div><strong>Stored Source Excerpts</strong>{latestReview.ai_review_sources.map((source: any) => <pre key={source.id} style={{ background: "#f8fafc", borderRadius: 12, padding: 12, whiteSpace: "pre-wrap" }}>{toText(source.source_label)}\n{toText(source.source_excerpt)}</pre>)}</div> : null}
-      </div>}
+      <div style={{ marginTop: 18 }}>
+        {!output ? <p style={{ color: "#5d687b" }}>No AI review has been run yet.</p> : <AiResultView output={output} sources={sources} />}
+      </div>
     </section>
   );
 }
