@@ -1,5 +1,8 @@
 export type AiReviewOutput = {
   review_summary: string;
+  client_display_recommendation: string;
+  records_to_show_client: string[];
+  records_to_hold_back: string[];
   identity_match_concerns: string[];
   record_completeness: string[];
   possible_reportability_issues: string[];
@@ -21,29 +24,17 @@ function text(value: unknown): string {
   if (typeof value === "object") return Object.entries(value as Record<string, unknown>).map(([key, val]) => `${key}: ${text(val)}`).join("; ");
   return String(value);
 }
-
-function list(value: unknown): string[] {
-  if (Array.isArray(value)) return value.map(text).filter(Boolean);
-  const one = text(value);
-  return one ? [one] : [];
-}
-
-function bool(value: unknown, fallback = false): boolean {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "string") return ["yes", "true", "needed", "required"].includes(value.toLowerCase());
-  return fallback;
-}
-
-function confidence(value: unknown): number {
-  if (typeof value === "number") return Math.max(0, Math.min(1, value > 1 ? value / 100 : value));
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? Math.max(0, Math.min(1, parsed > 1 ? parsed / 100 : parsed)) : 0.5;
-}
+function list(value: unknown): string[] { if (Array.isArray(value)) return value.map(text).filter(Boolean); const one = text(value); return one ? [one] : []; }
+function bool(value: unknown, fallback = false): boolean { if (typeof value === "boolean") return value; if (typeof value === "string") return ["yes", "true", "needed", "required"].includes(value.toLowerCase()); return fallback; }
+function confidence(value: unknown): number { if (typeof value === "number") return Math.max(0, Math.min(1, value > 1 ? value / 100 : value)); const parsed = Number(value); return Number.isFinite(parsed) ? Math.max(0, Math.min(1, parsed > 1 ? parsed / 100 : parsed)) : 0.5; }
 
 export function normalizeAiReviewOutput(raw: unknown): AiReviewOutput {
   const row = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   return {
     review_summary: text(row.review_summary) || "AI review completed, but no summary was provided.",
+    client_display_recommendation: text(row.client_display_recommendation) || text(row.recommended_next_step) || "Needs human review before showing the client.",
+    records_to_show_client: list(row.records_to_show_client),
+    records_to_hold_back: list(row.records_to_hold_back),
     identity_match_concerns: list(row.identity_match_concerns),
     record_completeness: list(row.record_completeness),
     possible_reportability_issues: list(row.possible_reportability_issues),
@@ -59,15 +50,7 @@ export function normalizeAiReviewOutput(raw: unknown): AiReviewOutput {
 }
 
 function fallbackJson(textValue: string): AiReviewOutput {
-  return normalizeAiReviewOutput({
-    review_summary: textValue.slice(0, 900) || "AI review completed, but structured parsing failed.",
-    county_verification_needed: true,
-    missing_information: ["Reviewer should manually verify the AI response."],
-    recommended_next_step: "Manual reviewer follow-up required.",
-    supervisor_review_needed: true,
-    confidence: 0.4,
-    draft_reviewer_note: "Manual review needed because the AI response could not be parsed into the expected format.",
-  });
+  return normalizeAiReviewOutput({ review_summary: textValue.slice(0, 900) || "AI review completed, but structured parsing failed.", county_verification_needed: true, missing_information: ["Reviewer should manually verify the AI response."], recommended_next_step: "Manual reviewer follow-up required.", supervisor_review_needed: true, confidence: 0.4, draft_reviewer_note: "Manual review needed because the AI response could not be parsed into the expected format." });
 }
 
 export async function runOpenAiReview(input: { caseRecord: any; chunks: any[] }): Promise<AiReviewOutput> {
@@ -75,15 +58,14 @@ export async function runOpenAiReview(input: { caseRecord: any; chunks: any[] })
   if (!apiKey) throw new Error("OpenAI is not configured.");
   const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
   const sourceText = input.chunks.map((chunk, index) => `[Source ${index + 1}] ${chunk.documents?.document_name || "Uploaded document"} v${chunk.document_versions?.version_number || 1}: ${chunk.chunk_text}`).join("\n\n");
-  const body = {
-    model,
-    temperature: 0.1,
-    messages: [
-      { role: "system", content: "You are an internal SaffHire compliance review assistant. You provide guidance only. You do not make final reportability decisions. Use uploaded documents and federal FCRA reference principles. If support is missing, say more review is needed. Return valid JSON only. Keep each array field as an array of plain strings, never objects." },
-      { role: "user", content: `Review type: ${input.caseRecord.review_type}\nSubject: ${input.caseRecord.subject_name}\nJurisdiction: ${input.caseRecord.jurisdiction || "Not entered"}\nCounty: ${input.caseRecord.county || ""}\nState: ${input.caseRecord.state || ""}\nSource text:\n${input.caseRecord.raw_record_text}\n\nApproved source excerpts:\n${sourceText || "No uploaded document excerpts were found. Use federal FCRA reference principles only and clearly say uploaded-source support is missing."}\n\nReturn JSON with keys: review_summary, identity_match_concerns, record_completeness, possible_reportability_issues, possible_fcra_concerns, county_verification_needed, missing_information, recommended_next_step, supervisor_review_needed, confidence, sources_used, draft_reviewer_note.` }
-    ],
-    response_format: { type: "json_object" }
-  };
+  const isClientDisplayReview = input.caseRecord.review_type === "county_search" || input.caseRecord.review_type === "national_crim";
+  const instruction = isClientDisplayReview
+    ? "You are reviewing pasted screening search data to decide what should be shown to the client. You provide guidance only. Do not make a final decision. Focus on match quality, aliases, address ties, completeness, county verification, and whether any data should be held back pending review. Return valid JSON only. Arrays must contain plain strings."
+    : "You are an internal SaffHire compliance review assistant. You provide guidance only. You do not make final reportability decisions. Use uploaded documents and federal FCRA reference principles. If support is missing, say more review is needed. Return valid JSON only. Arrays must contain plain strings.";
+  const requestedKeys = isClientDisplayReview
+    ? "review_summary, client_display_recommendation, records_to_show_client, records_to_hold_back, identity_match_concerns, record_completeness, possible_reportability_issues, possible_fcra_concerns, county_verification_needed, missing_information, recommended_next_step, supervisor_review_needed, confidence, sources_used, draft_reviewer_note"
+    : "review_summary, identity_match_concerns, record_completeness, possible_reportability_issues, possible_fcra_concerns, county_verification_needed, missing_information, recommended_next_step, supervisor_review_needed, confidence, sources_used, draft_reviewer_note";
+  const body = { model, temperature: 0.1, messages: [ { role: "system", content: instruction }, { role: "user", content: `Review type: ${input.caseRecord.review_type}\nSubject: ${input.caseRecord.subject_name}\nJurisdiction: ${input.caseRecord.jurisdiction || "Not entered"}\nCounty: ${input.caseRecord.county || ""}\nState: ${input.caseRecord.state || ""}\nSource text:\n${input.caseRecord.raw_record_text}\n\nApproved source excerpts:\n${sourceText || "No uploaded document excerpts were found. Use approved review principles only and clearly say uploaded-source support is missing."}\n\nReturn JSON with keys: ${requestedKeys}.` } ], response_format: { type: "json_object" } };
   const response = await fetch("https://api.openai.com/v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` }, body: JSON.stringify(body) });
   if (!response.ok) throw new Error(`OpenAI review failed with status ${response.status}`);
   const json = await response.json();
