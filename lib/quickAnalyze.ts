@@ -30,7 +30,15 @@ export function buildQuickAnalyzeCaseRecord(input: Record<string, string>) {
 
 export async function getQuickAnalysis(id: string) {
   const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase.from("quick_reviews").select("*, quick_review_sources(*)").eq("id", id).maybeSingle();
+  const { data, error } = await supabase.from("quick_reviews").select("*").eq("id", id).maybeSingle();
   if (error) throw error;
-  return data;
+  if (!data) return null;
+  let sources: any[] = [];
+  try {
+    const sourceRows = await supabase.from("quick_review_sources").select("*").eq("quick_review_id", id).order("created_at", { ascending: true });
+    sources = sourceRows.data || [];
+  } catch {
+    sources = [];
+  }
+  return { ...data, quick_review_sources: sources };
 }
