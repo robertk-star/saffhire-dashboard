@@ -13,12 +13,12 @@ export async function POST(request: Request) {
   const clientCode = String(formData.get("clientCode") || "").trim();
   const clientGuid = String(formData.get("clientGuid") || "").trim();
   const notes = String(formData.get("notes") || "").trim();
-  if (!id || !name || !clientGuid) return NextResponse.redirect(new URL("/tazworks/saved-clients?error=missing", request.url), 303);
+  if (!id || !name || !clientGuid) return NextResponse.redirect(new URL(id ? `/tazworks/clients/${id}/edit?error=missing` : "/tazworks/clients?error=missing", request.url), 303);
   try {
     await updateTazworksSavedClient({ id, name, clientCode, clientGuid, notes });
     await writeAuditLog({ user, action: "tazworks_saved_client_updated", entityType: "tazworks_saved_client", entityId: id, metadata: { name, clientCode, clientGuid } });
-    return NextResponse.redirect(new URL("/tazworks/saved-clients?updated=1", request.url), 303);
+    return NextResponse.redirect(new URL("/tazworks/clients?updated=1", request.url), 303);
   } catch {
-    return NextResponse.redirect(new URL("/tazworks/saved-clients?error=update", request.url), 303);
+    return NextResponse.redirect(new URL(`/tazworks/clients/${id}/edit?error=update`, request.url), 303);
   }
 }
