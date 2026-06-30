@@ -16,10 +16,12 @@ function cleanGuid(value: string) {
   return value.trim();
 }
 
-export async function listTazworksSavedClients(includeInactive = false): Promise<TazworksSavedClient[]> {
+export async function listTazworksSavedClients(includeInactive = false, search = ""): Promise<TazworksSavedClient[]> {
   const supabase = getSupabaseAdmin();
   let query = supabase.from("tazworks_saved_clients").select("*").order("name", { ascending: true });
   if (!includeInactive) query = query.eq("is_active", true);
+  const term = search.trim();
+  if (term) query = query.or(`name.ilike.%${term}%,client_code.ilike.%${term}%,client_guid.ilike.%${term}%`);
   const { data, error } = await query;
   if (error) throw error;
   return (data || []) as TazworksSavedClient[];
