@@ -13,6 +13,7 @@ export type TazworksConnectionStatus = {
 };
 
 export type ImportedTazworksSearch = { searchGuid: string; quickReviewId?: string; importedAt?: string };
+export type TazworksClientOption = { guid: string; name: string; code: string; label: string; raw: any };
 
 function cleanBaseUrl() {
   return (process.env.TAZWORKS_API_BASE_URL || "https://api-sandbox.instascreen.net").replace(/\/$/, "");
@@ -52,57 +53,77 @@ export function getTazworksStatus(): TazworksConnectionStatus {
   };
 }
 
+function parseJsonOrText(text: string) {
+  try { return text ? JSON.parse(text) : null; } catch { return text; }
+}
+
 // TazWorks integration is intentionally READ-ONLY.
 // This helper only sends GET requests. In proxy mode, Vercel calls the fixed-IP proxy, and the proxy makes GET-only TazWorks calls.
-async function tazworksRequest(path: string) {
+async function tazworksRequest(proxyPath: string, directPath?: string) {
   if (useProxy()) {
     const proxyBaseUrl = cleanProxyBaseUrl();
     const proxySecret = getProxySecret();
     if (!proxyBaseUrl) throw new Error("TazWorks proxy base URL is not configured.");
     if (!proxySecret) throw new Error("TazWorks proxy secret is not configured.");
-    const response = await fetch(`${proxyBaseUrl}${path.startsWith("/") ? path : `/${path}`}`, { method: "GET", headers: { Authorization: `Bearer ${proxySecret}`, Accept: "application/json" }, cache: "no-store" });
+    const path = proxyPath.startsWith("/") ? proxyPath : `/${proxyPath}`;
+    const response = await fetch(`${proxyBaseUrl}${path}`, { method: "GET", headers: { Authorization: `Bearer ${proxySecret}`, Accept: "application/json" }, cache: "no-store" });
     const text = await response.text();
-    let data: any = text;
-    try { data = text ? JSON.parse(text) : null; } catch {}
+    const data: any = parseJsonOrText(text);
     if (!response.ok) throw new Error(typeof data === "object" ? JSON.stringify(data) : String(data));
     return data;
   }
   const token = getBearerCredential();
   if (!token) throw new Error("TazWorks bearer credential is not configured.");
-  const url = `${cleanBaseUrl()}${path.startsWith("/") ? path : `/${path}`}`;
-  const response = await fetch(url, { method: "GET", headers: { Authorization: `Bearer ${token}`, Accept: "application/json" }, cache: "no-store" });
+  const path = (directPath || proxyPath).startsWith("/") ? (directPath || proxyPath) : `/${directPath || proxyPath}`;
+  const response = await fetch(`${cleanBaseUrl()}${path}`, { method: "GET", headers: { Authorization: `Bearer ${token}`, Accept: "application/json" }, cache: "no-store" });
   const text = await response.text();
-  let data: any = text;
-  try { data = text ? JSON.parse(text) : null; } catch {}
+  const data: any = parseJsonOrText(text);
   if (!response.ok) throw new Error(typeof data === "object" ? JSON.stringify(data) : String(data));
   return data;
 }
 
 export async function listTazworksClients(page = 0, size = 25) {
-  return tazworksRequest(`/tazworks/clients?page=${page}&size=${size}`);
+  return tazworksRequest(`/tazworks/clients?page=${page}&size=${size}`, `/v1/clients?page=${page}&size=${size}`);
+}
+
+export function getTazworksClientGuid(row: any) {
+  return String(row?.clientGuid || row?.guid || row?.id || row?.clientIdentifier || row?.clientId || "");
+}
+
+export function normalizeTazworksClient(row: any): TazworksClientOption {
+  const guid = getTazworksClientGuid(row);
+  const name = String(row?.name || row?.clientName || row?.displayName || row?.companyName || "Unnamed client");
+  const code = String(row?.code || row?.clientCode || row?.accountCode || "");
+  return { guid, name, code, label: code ? `${name} (${code})` : name, raw: row };
+}
+
+export function normalizeTazworksClientList(data: any): TazworksClientOption[] {
+  const rows = Array.isArray(data) ? data : data?.content || data?.items || data?.clients || [];
+  return rows.map(normalizeTazworksClient).filter((client: TazworksClientOption) => Boolean(client.guid));
 }
 
 export async function listTazworksOrders(clientGuid: string, page = 0, size = 10) {
   const proxyClient = clientGuid ? `&clientGuid=${encodeURIComponent(clientGuid)}` : "";
-  return tazworksRequest(`/tazworks/orders?page=${page}&size=${size}${proxyClient}`);
+  return tazworksRequest(`/tazworks/orders?page=${page}&size=${size}${proxyClient}`, `/v1/clients/${clientGuid}/orders?page=${page}&size=${size}`);
 }
 
 export async function listTazworksOrderSearches(clientGuid: string, orderGuid: string) {
   const proxyClient = clientGuid ? `?clientGuid=${encodeURIComponent(clientGuid)}` : "";
-  return tazworksRequest(`/tazworks/orders/${orderGuid}/searches${proxyClient}`);
+  return tazworksRequest(`/tazworks/orders/${orderGuid}/searches${proxyClient}`, `/v1/clients/${clientGuid}/orders/${orderGuid}/searches`);
 }
 
 export async function getTazworksSearchResult(clientGuid: string, orderGuid: string, searchGuid: string, resultType = "EDITOR") {
   const params = new URLSearchParams();
   if (resultType) params.set("resultType", resultType);
   if (clientGuid) params.set("clientGuid", clientGuid);
-  const suffix = params.toString() ? `?${params.toString()}` : "";
-  return tazworksRequest(`/tazworks/orders/${orderGuid}/searches/${searchGuid}/results${suffix}`);
+  const proxySuffix = params.toString() ? `?${params.toString()}` : "";
+  const directSuffix = resultType ? `?resultType=${encodeURIComponent(resultType)}` : "";
+  return tazworksRequest(`/tazworks/orders/${orderGuid}/searches/${searchGuid}/results${proxySuffix}`, `/v1/clients/${clientGuid}/orders/${orderGuid}/searches/${searchGuid}/results${directSuffix}`);
 }
 
 export async function getAllTazworksSearchResults(clientGuid: string, orderGuid: string) {
   const suffix = clientGuid ? `?clientGuid=${encodeURIComponent(clientGuid)}` : "";
-  return tazworksRequest(`/tazworks/orders/${orderGuid}/searches/results${suffix}`);
+  return tazworksRequest(`/tazworks/orders/${orderGuid}/searches/results${suffix}`, `/v1/clients/${clientGuid}/orders/${orderGuid}/searches/results`);
 }
 
 export function getDefaultTazworksClientGuid() {
