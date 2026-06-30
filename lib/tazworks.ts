@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { filterTazworksClientOptions, getTazworksAccessStatus, resolveTazworksClientGuid } from "@/lib/tazworksAccess";
 
 export type TazworksConnectionStatus = {
   configured: boolean;
@@ -9,6 +10,9 @@ export type TazworksConnectionStatus = {
   proxyMode: boolean;
   proxyBaseUrlSet: boolean;
   proxySecretSet: boolean;
+  clientAccessLocked: boolean;
+  allowedClientCount: number;
+  lockedClientGuidSet: boolean;
   checkedAt: string;
 };
 
@@ -40,6 +44,7 @@ export function getTazworksStatus(): TazworksConnectionStatus {
   const token = getBearerCredential();
   const proxyMode = useProxy();
   const proxySecret = getProxySecret();
+  const access = getTazworksAccessStatus();
   return {
     configured: proxyMode ? Boolean(cleanProxyBaseUrl() && proxySecret) : Boolean(cleanBaseUrl() && token),
     sandboxMode: process.env.TAZWORKS_SANDBOX_MODE !== "false",
@@ -49,6 +54,9 @@ export function getTazworksStatus(): TazworksConnectionStatus {
     proxyMode,
     proxyBaseUrlSet: Boolean(cleanProxyBaseUrl()),
     proxySecretSet: Boolean(proxySecret),
+    clientAccessLocked: access.lockedMode,
+    allowedClientCount: access.allowedClientCount,
+    lockedClientGuidSet: access.lockedClientGuidSet,
     checkedAt: new Date().toISOString(),
   };
 }
@@ -99,35 +107,40 @@ export function normalizeTazworksClient(row: any): TazworksClientOption {
 
 export function normalizeTazworksClientList(data: any): TazworksClientOption[] {
   const rows = Array.isArray(data) ? data : data?.content || data?.items || data?.clients || [];
-  return rows.map(normalizeTazworksClient).filter((client: TazworksClientOption) => Boolean(client.guid));
+  const normalized = rows.map(normalizeTazworksClient).filter((client: TazworksClientOption) => Boolean(client.guid));
+  return filterTazworksClientOptions(normalized);
 }
 
 export async function listTazworksOrders(clientGuid: string, page = 0, size = 10) {
-  const proxyClient = clientGuid ? `&clientGuid=${encodeURIComponent(clientGuid)}` : "";
-  return tazworksRequest(`/tazworks/orders?page=${page}&size=${size}${proxyClient}`, `/v1/clients/${clientGuid}/orders?page=${page}&size=${size}`);
+  const allowedClientGuid = resolveTazworksClientGuid(clientGuid);
+  const proxyClient = allowedClientGuid ? `&clientGuid=${encodeURIComponent(allowedClientGuid)}` : "";
+  return tazworksRequest(`/tazworks/orders?page=${page}&size=${size}${proxyClient}`, `/v1/clients/${allowedClientGuid}/orders?page=${page}&size=${size}`);
 }
 
 export async function listTazworksOrderSearches(clientGuid: string, orderGuid: string) {
-  const proxyClient = clientGuid ? `?clientGuid=${encodeURIComponent(clientGuid)}` : "";
-  return tazworksRequest(`/tazworks/orders/${orderGuid}/searches${proxyClient}`, `/v1/clients/${clientGuid}/orders/${orderGuid}/searches`);
+  const allowedClientGuid = resolveTazworksClientGuid(clientGuid);
+  const proxyClient = allowedClientGuid ? `?clientGuid=${encodeURIComponent(allowedClientGuid)}` : "";
+  return tazworksRequest(`/tazworks/orders/${orderGuid}/searches${proxyClient}`, `/v1/clients/${allowedClientGuid}/orders/${orderGuid}/searches`);
 }
 
 export async function getTazworksSearchResult(clientGuid: string, orderGuid: string, searchGuid: string, resultType = "EDITOR") {
+  const allowedClientGuid = resolveTazworksClientGuid(clientGuid);
   const params = new URLSearchParams();
   if (resultType) params.set("resultType", resultType);
-  if (clientGuid) params.set("clientGuid", clientGuid);
+  if (allowedClientGuid) params.set("clientGuid", allowedClientGuid);
   const proxySuffix = params.toString() ? `?${params.toString()}` : "";
   const directSuffix = resultType ? `?resultType=${encodeURIComponent(resultType)}` : "";
-  return tazworksRequest(`/tazworks/orders/${orderGuid}/searches/${searchGuid}/results${proxySuffix}`, `/v1/clients/${clientGuid}/orders/${orderGuid}/searches/${searchGuid}/results${directSuffix}`);
+  return tazworksRequest(`/tazworks/orders/${orderGuid}/searches/${searchGuid}/results${proxySuffix}`, `/v1/clients/${allowedClientGuid}/orders/${orderGuid}/searches/${searchGuid}/results${directSuffix}`);
 }
 
 export async function getAllTazworksSearchResults(clientGuid: string, orderGuid: string) {
-  const suffix = clientGuid ? `?clientGuid=${encodeURIComponent(clientGuid)}` : "";
-  return tazworksRequest(`/tazworks/orders/${orderGuid}/searches/results${suffix}`, `/v1/clients/${clientGuid}/orders/${orderGuid}/searches/results`);
+  const allowedClientGuid = resolveTazworksClientGuid(clientGuid);
+  const suffix = allowedClientGuid ? `?clientGuid=${encodeURIComponent(allowedClientGuid)}` : "";
+  return tazworksRequest(`/tazworks/orders/${orderGuid}/searches/results${suffix}`, `/v1/clients/${allowedClientGuid}/orders/${orderGuid}/searches/results`);
 }
 
 export function getDefaultTazworksClientGuid() {
-  return process.env.TAZWORKS_CLIENT_GUID || "";
+  return resolveTazworksClientGuid(process.env.TAZWORKS_CLIENT_GUID || "");
 }
 
 export function normalizeTazworksPayload(payload: any) {
