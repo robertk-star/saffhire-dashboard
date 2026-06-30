@@ -15,12 +15,13 @@ function cleanBaseUrl() {
   return (process.env.TAZWORKS_API_BASE_URL || "https://api-sandbox.instascreen.net").replace(/\/$/, "");
 }
 
-function tokenEnvName() {
-  return "TAZWORKS_JWT_TOKEN";
+function getBearerCredential() {
+  const raw = process.env.TAZWORKS_BEARER_TOKEN || process.env.TAZWORKS_JWT_TOKEN || "";
+  return raw.trim().replace(/^Bearer\s+/i, "").trim();
 }
 
 export function getTazworksStatus(): TazworksConnectionStatus {
-  const token = process.env[tokenEnvName()];
+  const token = getBearerCredential();
   return {
     configured: Boolean(cleanBaseUrl() && token),
     sandboxMode: process.env.TAZWORKS_SANDBOX_MODE !== "false",
@@ -34,8 +35,8 @@ export function getTazworksStatus(): TazworksConnectionStatus {
 // TazWorks integration is intentionally READ-ONLY.
 // This helper only sends GET requests to TazWorks. Do not add POST/PUT/PATCH/DELETE calls here.
 async function tazworksRequest(path: string) {
-  const token = process.env[tokenEnvName()];
-  if (!token) throw new Error("TazWorks token is not configured.");
+  const token = getBearerCredential();
+  if (!token) throw new Error("TazWorks bearer credential is not configured.");
   const url = `${cleanBaseUrl()}${path.startsWith("/") ? path : `/${path}`}`;
   const response = await fetch(url, { method: "GET", headers: { Authorization: `Bearer ${token}`, Accept: "application/json" }, cache: "no-store" });
   const text = await response.text();
