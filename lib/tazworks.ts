@@ -9,6 +9,8 @@ export type TazworksConnectionStatus = {
   checkedAt: string;
 };
 
+export type ImportedTazworksSearch = { searchGuid: string; quickReviewId?: string; importedAt?: string };
+
 function cleanBaseUrl() {
   return (process.env.TAZWORKS_API_BASE_URL || "https://api-sandbox.instascreen.net").replace(/\/$/, "");
 }
@@ -29,11 +31,13 @@ export function getTazworksStatus(): TazworksConnectionStatus {
   };
 }
 
+// TazWorks integration is intentionally READ-ONLY.
+// This helper only sends GET requests to TazWorks. Do not add POST/PUT/PATCH/DELETE calls here.
 async function tazworksRequest(path: string) {
   const token = process.env[tokenEnvName()];
   if (!token) throw new Error("TazWorks token is not configured.");
   const url = `${cleanBaseUrl()}${path.startsWith("/") ? path : `/${path}`}`;
-  const response = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" }, cache: "no-store" });
+  const response = await fetch(url, { method: "GET", headers: { Authorization: `Bearer ${token}`, Accept: "application/json" }, cache: "no-store" });
   const text = await response.text();
   let data: any = text;
   try { data = text ? JSON.parse(text) : null; } catch {}
@@ -45,7 +49,7 @@ export async function listTazworksClients(page = 0, size = 25) {
   return tazworksRequest(`/v1/clients?page=${page}&size=${size}`);
 }
 
-export async function listTazworksOrders(clientGuid: string, page = 0, size = 25) {
+export async function listTazworksOrders(clientGuid: string, page = 0, size = 10) {
   return tazworksRequest(`/v1/clients/${clientGuid}/orders?page=${page}&size=${size}`);
 }
 
@@ -143,4 +147,18 @@ export async function getTazworksPayload(id: string) {
   const { data, error } = await supabase.from("tazworks_payloads").select("*").eq("id", id).maybeSingle();
   if (error) throw error;
   return data;
+}
+
+export async function getImportedTazworksSearchMap(searchGuids: string[]): Promise<Record<string, ImportedTazworksSearch>> {
+  const unique = Array.from(new Set(searchGuids.filter(Boolean)));
+  if (!unique.length) return {};
+  const out: Record<string, ImportedTazworksSearch> = {};
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data } = await supabase.from("quick_reviews").select("id,reference_number,created_at").in("reference_number", unique);
+    for (const row of data || []) {
+      if (row.reference_number) out[row.reference_number] = { searchGuid: row.reference_number, quickReviewId: row.id, importedAt: row.created_at };
+    }
+  } catch {}
+  return out;
 }
