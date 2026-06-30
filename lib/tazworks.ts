@@ -6,6 +6,9 @@ export type TazworksConnectionStatus = {
   baseUrlSet: boolean;
   tokenSet: boolean;
   defaultClientGuidSet: boolean;
+  proxyMode: boolean;
+  proxyBaseUrlSet: boolean;
+  proxySecretSet: boolean;
   checkedAt: string;
 };
 
@@ -15,26 +18,55 @@ function cleanBaseUrl() {
   return (process.env.TAZWORKS_API_BASE_URL || "https://api-sandbox.instascreen.net").replace(/\/$/, "");
 }
 
+function cleanProxyBaseUrl() {
+  return (process.env.TAZWORKS_PROXY_BASE_URL || "").replace(/\/$/, "");
+}
+
+function useProxy() {
+  return process.env.TAZWORKS_USE_PROXY === "true" || Boolean(cleanProxyBaseUrl());
+}
+
 function getBearerCredential() {
   const raw = process.env.TAZWORKS_BEARER_TOKEN || process.env.TAZWORKS_JWT_TOKEN || "";
   return raw.trim().replace(/^Bearer\s+/i, "").trim();
 }
 
+function getProxySecret() {
+  return String(process.env.TAZWORKS_PROXY_SECRET || "").trim().replace(/^Bearer\s+/i, "").trim();
+}
+
 export function getTazworksStatus(): TazworksConnectionStatus {
   const token = getBearerCredential();
+  const proxyMode = useProxy();
+  const proxySecret = getProxySecret();
   return {
-    configured: Boolean(cleanBaseUrl() && token),
+    configured: proxyMode ? Boolean(cleanProxyBaseUrl() && proxySecret) : Boolean(cleanBaseUrl() && token),
     sandboxMode: process.env.TAZWORKS_SANDBOX_MODE !== "false",
     baseUrlSet: Boolean(process.env.TAZWORKS_API_BASE_URL),
     tokenSet: Boolean(token),
     defaultClientGuidSet: Boolean(process.env.TAZWORKS_CLIENT_GUID),
+    proxyMode,
+    proxyBaseUrlSet: Boolean(cleanProxyBaseUrl()),
+    proxySecretSet: Boolean(proxySecret),
     checkedAt: new Date().toISOString(),
   };
 }
 
 // TazWorks integration is intentionally READ-ONLY.
-// This helper only sends GET requests to TazWorks. Do not add POST/PUT/PATCH/DELETE calls here.
+// This helper only sends GET requests. In proxy mode, Vercel calls the fixed-IP proxy, and the proxy makes GET-only TazWorks calls.
 async function tazworksRequest(path: string) {
+  if (useProxy()) {
+    const proxyBaseUrl = cleanProxyBaseUrl();
+    const proxySecret = getProxySecret();
+    if (!proxyBaseUrl) throw new Error("TazWorks proxy base URL is not configured.");
+    if (!proxySecret) throw new Error("TazWorks proxy secret is not configured.");
+    const response = await fetch(`${proxyBaseUrl}${path.startsWith("/") ? path : `/${path}`}`, { method: "GET", headers: { Authorization: `Bearer ${proxySecret}`, Accept: "application/json" }, cache: "no-store" });
+    const text = await response.text();
+    let data: any = text;
+    try { data = text ? JSON.parse(text) : null; } catch {}
+    if (!response.ok) throw new Error(typeof data === "object" ? JSON.stringify(data) : String(data));
+    return data;
+  }
   const token = getBearerCredential();
   if (!token) throw new Error("TazWorks bearer credential is not configured.");
   const url = `${cleanBaseUrl()}${path.startsWith("/") ? path : `/${path}`}`;
@@ -47,24 +79,30 @@ async function tazworksRequest(path: string) {
 }
 
 export async function listTazworksClients(page = 0, size = 25) {
-  return tazworksRequest(`/v1/clients?page=${page}&size=${size}`);
+  return tazworksRequest(`/tazworks/clients?page=${page}&size=${size}`);
 }
 
 export async function listTazworksOrders(clientGuid: string, page = 0, size = 10) {
-  return tazworksRequest(`/v1/clients/${clientGuid}/orders?page=${page}&size=${size}`);
+  const proxyClient = clientGuid ? `&clientGuid=${encodeURIComponent(clientGuid)}` : "";
+  return tazworksRequest(`/tazworks/orders?page=${page}&size=${size}${proxyClient}`);
 }
 
 export async function listTazworksOrderSearches(clientGuid: string, orderGuid: string) {
-  return tazworksRequest(`/v1/clients/${clientGuid}/orders/${orderGuid}/searches`);
+  const proxyClient = clientGuid ? `?clientGuid=${encodeURIComponent(clientGuid)}` : "";
+  return tazworksRequest(`/tazworks/orders/${orderGuid}/searches${proxyClient}`);
 }
 
 export async function getTazworksSearchResult(clientGuid: string, orderGuid: string, searchGuid: string, resultType = "EDITOR") {
-  const suffix = resultType ? `?resultType=${encodeURIComponent(resultType)}` : "";
-  return tazworksRequest(`/v1/clients/${clientGuid}/orders/${orderGuid}/searches/${searchGuid}/results${suffix}`);
+  const params = new URLSearchParams();
+  if (resultType) params.set("resultType", resultType);
+  if (clientGuid) params.set("clientGuid", clientGuid);
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return tazworksRequest(`/tazworks/orders/${orderGuid}/searches/${searchGuid}/results${suffix}`);
 }
 
 export async function getAllTazworksSearchResults(clientGuid: string, orderGuid: string) {
-  return tazworksRequest(`/v1/clients/${clientGuid}/orders/${orderGuid}/searches/results`);
+  const suffix = clientGuid ? `?clientGuid=${encodeURIComponent(clientGuid)}` : "";
+  return tazworksRequest(`/tazworks/orders/${orderGuid}/searches/results${suffix}`);
 }
 
 export function getDefaultTazworksClientGuid() {
