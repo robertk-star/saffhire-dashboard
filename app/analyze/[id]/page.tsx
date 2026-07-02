@@ -14,9 +14,21 @@ function text(value: unknown): string {
   return String(value);
 }
 
+function isBadIdentityValue(value: string) {
+  const cleaned = value.trim();
+  if (!cleaned) return true;
+  if (/tazworks\s+(search\s+)?id/i.test(cleaned)) return true;
+  if (/^(client|order|search|analysis|tazworks)\s+(guid|id|reference)/i.test(cleaned)) return true;
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleaned)) return true;
+  if (/^[0-9a-f-]{20,}$/i.test(cleaned) && cleaned.includes("-")) return true;
+  if (/^not found$/i.test(cleaned)) return true;
+  if (/^selected analyzer/i.test(cleaned)) return true;
+  return false;
+}
+
 function unique(values: string[], limit = 16) {
   const seen = new Set<string>();
-  return values.map((value) => value.replace(/\s+/g, " ").trim()).filter(Boolean).filter((value) => {
+  return values.map((value) => value.replace(/\s+/g, " ").trim()).filter((value) => !isBadIdentityValue(value)).filter((value) => {
     const key = value.toLowerCase();
     if (seen.has(key)) return false;
     seen.add(key);
@@ -39,7 +51,8 @@ function collectByKey(value: any, match: (key: string) => boolean, output: strin
     return output;
   }
   for (const [key, val] of Object.entries(value)) {
-    if (match(normalizeKey(key))) output.push(text(val));
+    const normalized = normalizeKey(key);
+    if (match(normalized) && !["clientguid", "orderguid", "searchguid", "ordersearchguid", "analysisreference", "basereference"].includes(normalized)) output.push(text(val));
     if (val && typeof val === "object") collectByKey(val, match, output);
   }
   return output;
@@ -60,7 +73,7 @@ function collectAddressObjects(value: any, output: string[] = []) {
   if (parts.length >= 2) output.push(parts.join(", "));
   for (const [key, val] of Object.entries(row)) {
     const normalized = normalizeKey(key);
-    if ((normalized.includes("address") || normalized.includes("residence")) && typeof val === "string") output.push(val);
+    if ((normalized.includes("address") || normalized.includes("residence")) && !["addressid", "addressguid"].includes(normalized) && typeof val === "string") output.push(val);
     if (val && typeof val === "object") collectAddressObjects(val, output);
   }
   return output;
@@ -69,7 +82,7 @@ function collectAddressObjects(value: any, output: string[] = []) {
 function labeledValues(raw: string, labels: string[]) {
   const values: string[] = [];
   const safeLabels = labels.map((label) => label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  const nextLabel = "Name Searched|Name On Record|Full Name|Applicant Name|Subject Name|Alias Name|Alias|AKA|DOB Searched|DOB On Record|DOB|Date of Birth|Address History|Address Information|Address|Residence|Case Number|Court|Offense|Charge|Disposition|Arrest Date|File Date|Offense Date|Sentence|Other Info|Other Identifiers";
+  const nextLabel = "TazWorks Search ID|TazWorks Search Type|Client|Client Code|Client GUID|Order GUID|Search GUID|TazWorks Reference|Analysis Reference|Selected Analyzer|File Number|Name Searched|Name On Record|Full Name|Applicant|Applicant Name|Subject Name|Alias Name|Alias|AKA|DOB Searched|DOB On Record|DOB|Date of Birth|Address History|Address Information|Address|Residence|Case Number|Court|Offense|Charge|Disposition|Arrest Date|File Date|Offense Date|Sentence|Other Info|Other Identifiers|Jurisdiction|Record count|Record [0-9]+|Source|Status|Result";
   for (const label of safeLabels) {
     const pattern = new RegExp(`${label}\\s*[:\\t]?\\s*([\\s\\S]{1,300}?)(?=\\n\\s*(?:${nextLabel})\\s*[:\\t]?|\\n[A-Z][A-Za-z ]{2,40}\\s*[:\\t]|$)`, "gi");
     for (const match of raw.matchAll(pattern)) values.push(String(match[1] || "").trim());
@@ -79,6 +92,11 @@ function labeledValues(raw: string, labels: string[]) {
 
 function cleanRaw(raw: string) {
   return raw
+    .replace(/(TazWorks Search ID\s*:)/g, "\n$1")
+    .replace(/(TazWorks Search Type\s*:)/g, "\n$1")
+    .replace(/(Client GUID\s*:)/g, "\n$1")
+    .replace(/(Order GUID\s*:)/g, "\n$1")
+    .replace(/(Search GUID\s*:)/g, "\n$1")
     .replace(/(Alias Name:)/g, "\n$1")
     .replace(/(AKA:)/g, "\n$1")
     .replace(/(DOB Searched\s*:)/g, "\n$1")
@@ -99,8 +117,8 @@ function identityFromQuickReview(row: any) {
   const parsed = parseJsonMaybe(row.pasted_text || "");
   const nameValues = unique([
     row.person_name || "",
-    ...collectByKey(parsed, (key) => ["applicantname", "subjectname", "namesearched", "candidatename", "personname", "fullname", "nameonrecord", "displayvalue"].includes(key)),
-    ...labeledValues(raw, ["Name Searched", "Applicant Name", "Subject Name", "Full Name", "Name On Record"]),
+    ...collectByKey(parsed, (key) => ["applicantname", "subjectname", "namesearched", "candidatename", "personname", "fullname", "nameonrecord"].includes(key)),
+    ...labeledValues(raw, ["Name Searched", "Applicant Name", "Subject Name", "Full Name", "Name On Record", "Applicant"]),
   ]);
   const aliasValues = unique([
     ...collectByKey(parsed, (key) => key.includes("alias") || key.includes("aka") || key.includes("namevariation") || key.includes("namevariations") || key.includes("othername") || key.includes("previousname")),
