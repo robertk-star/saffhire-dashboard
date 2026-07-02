@@ -14,63 +14,108 @@ function text(value: unknown): string {
   return String(value);
 }
 
-function unique(values: string[]) {
+function unique(values: string[], limit = 16) {
   const seen = new Set<string>();
-  return values.map((value) => value.trim()).filter(Boolean).filter((value) => {
+  return values.map((value) => value.replace(/\s+/g, " ").trim()).filter(Boolean).filter((value) => {
     const key = value.toLowerCase();
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
-  }).slice(0, 12);
+  }).slice(0, limit);
 }
 
 function parseJsonMaybe(value: string) {
   try { return JSON.parse(value); } catch { return null; }
 }
 
-function collectByKey(value: any, patterns: RegExp[], output: string[] = []) {
+function normalizeKey(key: string) {
+  return key.replace(/[^a-z0-9]/gi, "").toLowerCase();
+}
+
+function collectByKey(value: any, match: (key: string) => boolean, output: string[] = []) {
   if (!value || typeof value !== "object") return output;
   if (Array.isArray(value)) {
-    for (const item of value) collectByKey(item, patterns, output);
+    for (const item of value) collectByKey(item, match, output);
     return output;
   }
   for (const [key, val] of Object.entries(value)) {
-    if (patterns.some((pattern) => pattern.test(key))) output.push(text(val));
-    if (val && typeof val === "object") collectByKey(val, patterns, output);
+    if (match(normalizeKey(key))) output.push(text(val));
+    if (val && typeof val === "object") collectByKey(val, match, output);
   }
   return output;
 }
 
-function regexValues(raw: string, patterns: RegExp[]) {
+function collectAddressObjects(value: any, output: string[] = []) {
+  if (!value || typeof value !== "object") return output;
+  if (Array.isArray(value)) {
+    for (const item of value) collectAddressObjects(item, output);
+    return output;
+  }
+  const row = value as Record<string, unknown>;
+  const parts = [
+    row.addressLine1, row.address1, row.street, row.street1, row.line1,
+    row.addressLine2, row.address2, row.street2, row.line2,
+    row.city, row.county, row.state, row.zip, row.zipCode, row.postalCode,
+  ].map(text).filter(Boolean);
+  if (parts.length >= 2) output.push(parts.join(", "));
+  for (const [key, val] of Object.entries(row)) {
+    const normalized = normalizeKey(key);
+    if ((normalized.includes("address") || normalized.includes("residence")) && typeof val === "string") output.push(val);
+    if (val && typeof val === "object") collectAddressObjects(val, output);
+  }
+  return output;
+}
+
+function labeledValues(raw: string, labels: string[]) {
   const values: string[] = [];
-  for (const pattern of patterns) {
-    const matches = raw.matchAll(pattern);
-    for (const match of matches) values.push(String(match[1] || "").trim());
+  const safeLabels = labels.map((label) => label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const nextLabel = "Name Searched|Name On Record|Full Name|Applicant Name|Subject Name|Alias Name|Alias|AKA|DOB Searched|DOB On Record|DOB|Date of Birth|Address History|Address Information|Address|Residence|Case Number|Court|Offense|Charge|Disposition|Arrest Date|File Date|Offense Date|Sentence|Other Info|Other Identifiers";
+  for (const label of safeLabels) {
+    const pattern = new RegExp(`${label}\\s*[:\\t]?\\s*([\\s\\S]{1,300}?)(?=\\n\\s*(?:${nextLabel})\\s*[:\\t]?|\\n[A-Z][A-Za-z ]{2,40}\\s*[:\\t]|$)`, "gi");
+    for (const match of raw.matchAll(pattern)) values.push(String(match[1] || "").trim());
   }
   return values;
 }
 
+function cleanRaw(raw: string) {
+  return raw
+    .replace(/(Alias Name:)/g, "\n$1")
+    .replace(/(AKA:)/g, "\n$1")
+    .replace(/(DOB Searched\s*:)/g, "\n$1")
+    .replace(/(DOB On Record\s*:)/g, "\n$1")
+    .replace(/(DOB\s*:)/g, "\n$1")
+    .replace(/(Address\s*:)/g, "\n$1")
+    .replace(/(Name Variation\(s\) Searched)/g, "\n$1")
+    .replace(/(Name Searched\s*)/g, "\n$1")
+    .replace(/(Name On Record\s*)/g, "\n$1");
+}
+
+function splitPossibleList(value: string) {
+  return value.split(/\n|;|\|/g).map((item) => item.trim()).filter(Boolean);
+}
+
 function identityFromQuickReview(row: any) {
-  const raw = `${row.full_text || ""}\n${row.pasted_text || ""}`;
+  const raw = cleanRaw(`${row.full_text || ""}\n${row.pasted_text || ""}`);
   const parsed = parseJsonMaybe(row.pasted_text || "");
   const nameValues = unique([
     row.person_name || "",
-    ...collectByKey(parsed, [/^(applicantName|subjectName|nameSearched|candidateName|personName|fullName)$/i]),
-    ...regexValues(raw, [/Name Searched\s*[:\t]\s*([^\n]+)/gi, /Applicant Name\s*[:\t]\s*([^\n]+)/gi, /Subject Name\s*[:\t]\s*([^\n]+)/gi, /Full Name\s*[:\t]\s*([^\n]+)/gi]),
+    ...collectByKey(parsed, (key) => ["applicantname", "subjectname", "namesearched", "candidatename", "personname", "fullname", "nameonrecord", "displayvalue"].includes(key)),
+    ...labeledValues(raw, ["Name Searched", "Applicant Name", "Subject Name", "Full Name", "Name On Record"]),
   ]);
   const aliasValues = unique([
-    ...collectByKey(parsed, [/alias/i, /nameVariation/i, /nameVariations/i]),
-    ...regexValues(raw, [/Alias(?: Name|es|\(es\) Found|\(es\))?\s*[:\t]\s*([^\n]+)/gi, /Name Variation\(s\) Searched\s*\n?([^\n]+)/gi]),
+    ...collectByKey(parsed, (key) => key.includes("alias") || key.includes("aka") || key.includes("namevariation") || key.includes("namevariations") || key.includes("othername") || key.includes("previousname")),
+    ...labeledValues(raw, ["Alias Name", "Alias", "AKA", "Aliases Found", "Name Variation(s) Searched", "Name Variations Searched"]).flatMap(splitPossibleList),
   ]);
   const dobValues = unique([
     row.dob || "",
-    ...collectByKey(parsed, [/^(dob|dateOfBirth|birthDate|dobSearched|dobOnRecord)$/i]),
-    ...regexValues(raw, [/DOB(?: Searched| On Record)?\s*[:\t]\s*([^\n]+)/gi, /Date of Birth\s*[:\t]\s*([^\n]+)/gi]),
+    ...collectByKey(parsed, (key) => ["dob", "dateofbirth", "birthdate", "dobs", "dobsearched", "dobonrecord", "birthdt"].includes(key) || key.includes("dateofbirth")),
+    ...labeledValues(raw, ["DOB Searched", "DOB On Record", "DOB", "Date of Birth", "Birth Date"]).flatMap(splitPossibleList),
   ]);
   const addressValues = unique([
-    ...collectByKey(parsed, [/address/i, /addressHistory/i, /cityState/i, /residence/i]),
-    ...regexValues(raw, [/Address(?: History| Information)?\s*[:\t]\s*([^\n]+)/gi, /Address\s*:\s*([^;\n]+)/gi, /Residence\s*[:\t]\s*([^\n]+)/gi]),
-  ]);
+    ...collectAddressObjects(parsed),
+    ...collectByKey(parsed, (key) => key.includes("addresshistory") || key.includes("addresses") || key.includes("residence") || key.includes("citystate")),
+    ...labeledValues(raw, ["Address History", "Address Information", "Address", "Residence", "Residential Address"]).flatMap(splitPossibleList),
+  ], 20);
   return { names: nameValues, aliases: aliasValues, dobs: dobValues, addresses: addressValues };
 }
 
