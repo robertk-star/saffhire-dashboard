@@ -26,18 +26,18 @@ function analyzerLabel(reviewType: ReviewType) {
 }
 
 function buildAnalysisReference(baseReference: string, reviewType: ReviewType) {
-  return `${baseReference}:${reviewType}`;
+  return `${baseReference}:${reviewType}:${Date.now()}`;
 }
 
 function capForAnalyzer(value: string) {
   const max = 45000;
-  return value.length > max ? `${value.slice(0, max)}\n\n[The TazWorks source text was shortened before AI analysis to avoid model size limits. The full text is still saved in SaffHire.]` : value;
+  return value.length > max ? `${value.slice(0, max)}\n\n[The source text was shortened before AI analysis. The full text is still saved in SaffHire.]` : value;
 }
 
 function rateLimitFallback(reviewType: ReviewType, message: string) {
   const label = analyzerLabel(reviewType);
   return {
-    review_summary: `${label} could not run because OpenAI returned a rate limit response. The TazWorks result was saved for manual review and can be retried later.`,
+    review_summary: `${label} could not run because OpenAI returned a rate limit response. The result was saved for manual review and can be retried later.`,
     client_display_recommendation: "Manual review needed before showing this result to the client.",
     subject_names: [],
     records_to_show_client: [],
@@ -49,7 +49,7 @@ function rateLimitFallback(reviewType: ReviewType, message: string) {
     priority_order: [],
     identity_strength: "Needs review",
     identity_match_concerns: ["AI analyzer did not complete due to OpenAI rate limiting."],
-    record_completeness: ["TazWorks result was pulled and saved, but AI analysis was rate-limited."],
+    record_completeness: ["Result was pulled and saved, but AI analysis was rate-limited."],
     possible_reportability_issues: ["Manual review required."],
     possible_fcra_concerns: ["Manual review required before reportability/client display decision."],
     county_verification_needed: true,
@@ -57,7 +57,7 @@ function rateLimitFallback(reviewType: ReviewType, message: string) {
     recommended_next_step: "Retry the analyzer after the OpenAI rate limit clears, or complete manual review.",
     supervisor_review_needed: true,
     confidence: 0.1,
-    sources_used: ["TazWorks result saved in SaffHire"],
+    sources_used: ["Result saved in SaffHire"],
     draft_reviewer_note: "OpenAI rate limit prevented the analyzer from completing. Review manually or retry later.",
   };
 }
@@ -98,9 +98,6 @@ export async function POST(request: Request) {
     const baseReference = String(payload?.orderSearchGuid || searchGuid);
     const analysisReference = buildAnalysisReference(baseReference, reviewType);
     const supabase = getSupabaseAdmin();
-    const { data: existingRows } = await supabase.from("quick_reviews").select("id").eq("reference_number", analysisReference).limit(1);
-    const existing = existingRows?.[0];
-    if (existing?.id) return NextResponse.redirect(new URL(`/analyze/${existing.id}`, request.url), 303);
     const label = clientLabel(clientName, clientCode);
     const importContext = { clientGuid, clientName, clientCode, orderGuid, searchGuid, baseReference, analysisReference, fileNumber, reviewType, analyzer: analyzerLabel(reviewType), importedAt: new Date().toISOString(), tazworksMutation: false };
     const storedPayload = { ...payload, _saffhireImportContext: importContext };
@@ -110,13 +107,7 @@ export async function POST(request: Request) {
     const chunks = await getRelevantDocumentChunks(analyzerText, 10);
     const caseRecord = { review_type: reviewType, subject_name: normalized.applicantName || payload?.displayValue || "TazWorks Result", dob: normalized.dob || null, jurisdiction: normalized.jurisdiction || null, county: null, state: null, source: `TazWorks ${payload?.type || "Search Result"} - ${label}${fileNumber ? ` - File #${fileNumber}` : ""} - ${analyzerLabel(reviewType)}`, external_reference_number: analysisReference, raw_record_text: analyzerText };
     let output: any;
-    try {
-      output = await runOpenAiReview({ caseRecord, chunks });
-    } catch (aiError: any) {
-      const aiMessage = String(aiError?.message || "AI review failed");
-      if (!aiMessage.includes("429")) throw aiError;
-      output = rateLimitFallback(reviewType, aiMessage);
-    }
+    try { output = await runOpenAiReview({ caseRecord, chunks }); } catch (aiError: any) { const aiMessage = String(aiError?.message || "AI review failed"); if (!aiMessage.includes("429")) throw aiError; output = rateLimitFallback(reviewType, aiMessage); }
     const { data: quickRow, error } = await supabase.from("quick_reviews").insert({ review_type: reviewType, source_type: `TazWorks ${payload?.type || "Search Result"} - ${label}${fileNumber ? ` - File #${fileNumber}` : ""} - ${analyzerLabel(reviewType)}`, person_name: normalized.applicantName || payload?.displayValue || null, dob: normalized.dob || null, state: null, county: null, reference_number: analysisReference, charge: null, disposition: null, disposition_date: null, sentence: null, pasted_text: JSON.stringify(storedPayload, null, 2), full_text: fullText, result_json: output, created_by: user.email }).select("id").single();
     if (error || !quickRow) return NextResponse.redirect(new URL(`${resultUrl}&error=quick_save`, request.url), 303);
     await supabase.from("tazworks_payloads").insert({ label: `API ${payload?.type || "Search Result"} - ${label}${fileNumber ? ` - File #${fileNumber}` : ""} - ${analyzerLabel(reviewType)}`, payload: storedPayload, applicant_name: normalized.applicantName || null, dob: normalized.dob || null, report_id: analysisReference, record_count: normalized.recordCount || 0, imported_by_email: user.email });
