@@ -30,7 +30,7 @@ function HeaderMenu({ label, items }: { label: string; items: Array<[string, str
 
 export function AppHeader({ user }: { user: SessionUser }) {
   const reviewItems: Array<[string, string]> = [["Quick Analyze", "/analyze"], ["Cases", "/cases"], ["Documents", "/documents"], ["Supervisor", "/supervisor"]];
-  const tazOrderItems: Array<[string, string]> = [["Taz Orders Home", "/tazworks"], ["Pull Orders", "/tazworks/orders"], ["Manage Clients", "/tazworks/clients"], ["Diagnostics", "/tazworks/diagnostics"], ["Field Mapping", "/tazworks/mapping"], ["Import Sample JSON", "/tazworks/import"]];
+  const tazOrderItems: Array<[string, string]> = [["Taz Orders Home", "/tazworks"], ["Pull Orders", "/tazworks/orders"], ["Current Orders", "/tazworks/current-orders"], ["Manage Clients", "/tazworks/clients"], ["Diagnostics", "/tazworks/diagnostics"], ["Field Mapping", "/tazworks/mapping"], ["Import Sample JSON", "/tazworks/import"]];
   const adminItems: Array<[string, string]> = [["Users", "/admin/users"], ["Audit Logs", "/admin/audit-logs"], ["Settings", "/settings"]];
   return (
     <div style={{ background: "#0f3b5f", color: "white" }}>
