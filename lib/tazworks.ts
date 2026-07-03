@@ -117,6 +117,12 @@ export async function listTazworksOrders(clientGuid: string, page = 0, size = 10
   return tazworksRequest(`/tazworks/orders?page=${page}&size=${size}${proxyClient}`, `/v1/clients/${allowedClientGuid}/orders?page=${page}&size=${size}`);
 }
 
+export async function getTazworksOrder(clientGuid: string, orderGuid: string) {
+  const allowedClientGuid = resolveTazworksClientGuid(clientGuid);
+  const proxyClient = allowedClientGuid ? `?clientGuid=${encodeURIComponent(allowedClientGuid)}` : "";
+  return tazworksRequest(`/tazworks/orders/${orderGuid}${proxyClient}`, `/v1/clients/${allowedClientGuid}/orders/${orderGuid}`);
+}
+
 export async function listTazworksOrderSearches(clientGuid: string, orderGuid: string) {
   const allowedClientGuid = resolveTazworksClientGuid(clientGuid);
   const proxyClient = allowedClientGuid ? `?clientGuid=${encodeURIComponent(allowedClientGuid)}` : "";
