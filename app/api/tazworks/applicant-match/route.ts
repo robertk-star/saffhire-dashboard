@@ -5,7 +5,7 @@ import { listTazworksApplicants } from "@/lib/tazworks";
 export const runtime = "nodejs";
 
 function rows(data: any) {
-  return Array.isArray(data) ? data : data?.content || data?.items || data?.applicants || [];
+  return Array.isArray(data) ? data : data?.content || data?.items || data?.applicants || data?.data || data?.results || data?.records || [];
 }
 
 function clean(value: string) {
@@ -22,6 +22,16 @@ function tokens(value: string) {
 
 function names(row: any) {
   return [row?.firstName, row?.middleName, row?.lastName].filter(Boolean).join(" ").trim();
+}
+
+function safeRow(row: any) {
+  return {
+    applicantGuid: row?.applicantGuid || row?.guid || row?.id || null,
+    firstName: row?.firstName || null,
+    middleName: row?.middleName || null,
+    lastName: row?.lastName || null,
+    dateOfBirth: row?.dateOfBirth || row?.dob || null,
+  };
 }
 
 function nameMatches(inputName: string, row: any) {
@@ -43,6 +53,11 @@ function nameMatches(inputName: string, row: any) {
   return false;
 }
 
+function responseKeys(data: any) {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return [];
+  return Object.keys(data).slice(0, 25);
+}
+
 export async function GET(request: Request) {
   await requireUser(["admin", "supervisor"]);
   const url = new URL(request.url);
@@ -57,12 +72,24 @@ export async function GET(request: Request) {
     const rowDob = dateOnly(String(row?.dateOfBirth || row?.dob || ""));
     const dobMatch = dobKey ? rowDob === dobKey : true;
     return dobMatch && nameMatches(name, row);
-  }).slice(0, 10).map((row: any) => ({
-    applicantGuid: row?.applicantGuid || row?.guid || row?.id || null,
-    firstName: row?.firstName || null,
-    middleName: row?.middleName || null,
-    lastName: row?.lastName || null,
-    dateOfBirth: row?.dateOfBirth || row?.dob || null,
-  }));
-  return NextResponse.json({ count: matches.length, matches });
+  }).slice(0, 10).map(safeRow);
+  const dobCandidates = applicantRows.filter((row: any) => {
+    const rowDob = dateOnly(String(row?.dateOfBirth || row?.dob || ""));
+    return dobKey ? rowDob === dobKey : false;
+  }).slice(0, 10).map(safeRow);
+  const nameCandidates = applicantRows.filter((row: any) => nameMatches(name, row)).slice(0, 10).map(safeRow);
+  const firstRows = applicantRows.slice(0, 5).map(safeRow);
+  return NextResponse.json({
+    count: matches.length,
+    matches,
+    diagnostics: {
+      totalApplicantsSeen: applicantRows.length,
+      responseShapeKeys: responseKeys(data),
+      searchedName: name,
+      searchedDob: dob,
+      dobCandidates,
+      nameCandidates,
+      firstRows,
+    },
+  });
 }
