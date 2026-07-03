@@ -13,6 +13,10 @@ function cleanKey(key: string) {
   return key.replace(/[^a-z0-9]/gi, "").toLowerCase();
 }
 
+function cleanName(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
 function unique(values: string[], limit = 30) {
   const seen = new Set<string>();
   return values.map((value) => value.replace(/\s+/g, " ").trim()).filter(Boolean).filter((value) => !/^not found$/i.test(value)).filter((value) => {
@@ -24,12 +28,35 @@ function unique(values: string[], limit = 30) {
 }
 
 function fullName(row: any) {
-  return [row?.firstName, row?.middleName, row?.lastName, row?.generation].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+  return cleanName([row?.firstName, row?.middleName, row?.lastName, row?.generation].filter(Boolean).join(" "));
+}
+
+function firstLast(row: any) {
+  return cleanName([row?.firstName, row?.lastName].filter(Boolean).join(" "));
+}
+
+function firstLastGeneration(row: any, generationOverride?: string) {
+  return cleanName([row?.firstName, row?.lastName, generationOverride || row?.generation].filter(Boolean).join(" "));
+}
+
+function lastFirstGeneration(row: any) {
+  return cleanName([row?.lastName, row?.firstName, row?.generation].filter(Boolean).join(" "));
 }
 
 function aliasNames(applicant: any) {
   const aliases = Array.isArray(applicant?.aliases) ? applicant.aliases : [];
-  return aliases.map(fullName).filter(Boolean);
+  const values = [
+    firstLast(applicant),
+    fullName(applicant),
+    firstLastGeneration(applicant),
+    lastFirstGeneration(applicant),
+    ...aliases.flatMap((alias: any) => [firstLast(alias), fullName(alias), firstLastGeneration(alias), lastFirstGeneration(alias)]),
+  ];
+  const generation = String(applicant?.generation || "").trim().toUpperCase();
+  if (generation === "JR" || generation === "JR.") {
+    values.push(firstLastGeneration(applicant, "II"));
+  }
+  return unique(values, 40);
 }
 
 function collectValues(source: any, match: (key: string) => boolean, output: string[] = []) {
@@ -102,7 +129,7 @@ export function buildTazworksIdentityText(input: { payload: any; orderRow: any; 
   const aliases = unique([
     ...aliasNames(applicant),
     ...sources.flatMap((source) => collectValues(source, (key) => key.includes("aka") || key.includes("namevariation") || key.includes("namevariations") || key.includes("othername") || key.includes("previousname"))),
-  ]);
+  ], 40);
   const dobs = unique([
     order.applicantDateOfBirth || "",
     applicant.dateOfBirth || "",
