@@ -35,6 +35,10 @@ function capForAnalyzer(value: string) {
   return value.length > max ? `${value.slice(0, max)}\n\n[The source text was shortened before AI analysis. The full text is still saved in SaffHire.]` : value;
 }
 
+function cleanString(value: any) {
+  return String(value || "").trim();
+}
+
 function rateLimitFallback(reviewType: ReviewType, message: string) {
   const label = analyzerLabel(reviewType);
   return {
@@ -99,21 +103,27 @@ export async function POST(request: Request) {
     const baseReference = String(payload?.orderSearchGuid || searchGuid);
     const analysisReference = buildAnalysisReference(baseReference, reviewType);
     const supabase = getSupabaseAdmin();
-    const label = clientLabel(clientName, clientCode);
-    const importContext = { clientGuid, clientName, clientCode, orderGuid, searchGuid, baseReference, analysisReference, fileNumber, reviewType, analyzer: analyzerLabel(reviewType), importedAt: new Date().toISOString(), tazworksMutation: false };
     const normalized = normalizeTazworksPayload(payload);
     const identityContext = await getTazworksIdentityContext(clientGuid, orderGuid, searchGuid);
-    const identityText = buildTazworksIdentityText({ payload, orderRow: identityContext.orderRow, searchRow: identityContext.searchRow, fallbackName: normalized.applicantName || payload?.displayValue || "", fallbackDob: normalized.dob || "" });
-    const storedPayload = { ...payload, _saffhireImportContext: importContext, _saffhireOrderContext: identityContext.orderRow, _saffhireSearchContext: identityContext.searchRow };
-    const fullText = `${buildImportHeader({ label, clientGuid, clientCode, orderGuid, searchGuid, fileNumber, reviewType, baseReference, analysisReference })}${identityText}${buildCaseTextFromTazworksPayload(payload)}`;
+    const orderRow = identityContext.orderRow || {};
+    const effectiveClientName = cleanString(orderRow.clientName) || clientName;
+    const effectiveClientCode = cleanString(orderRow.clientCode) || clientCode;
+    const effectiveFileNumber = cleanString(orderRow.fileNumber) || fileNumber;
+    const label = clientLabel(effectiveClientName, effectiveClientCode);
+    const effectiveApplicantName = cleanString(orderRow.applicantName) || normalized.applicantName || payload?.displayValue || "TazWorks Result";
+    const effectiveDob = cleanString(orderRow.applicantDateOfBirth) || normalized.dob || "";
+    const importContext = { clientGuid, clientName: effectiveClientName, clientCode: effectiveClientCode, orderGuid, searchGuid, baseReference, analysisReference, fileNumber: effectiveFileNumber, reviewType, analyzer: analyzerLabel(reviewType), importedAt: new Date().toISOString(), tazworksMutation: false, orderApplicantName: orderRow.applicantName || null, orderApplicantDateOfBirth: orderRow.applicantDateOfBirth || null, orderApplicantEmail: orderRow.applicantEmail || null, orderProductName: orderRow.productName || null, orderClientProductGuid: orderRow.clientProductGuid || null };
+    const identityText = buildTazworksIdentityText({ payload, orderRow, searchRow: identityContext.searchRow, fallbackName: effectiveApplicantName, fallbackDob: effectiveDob });
+    const storedPayload = { ...payload, _saffhireImportContext: importContext, _saffhireOrderContext: orderRow, _saffhireSearchContext: identityContext.searchRow };
+    const fullText = `${buildImportHeader({ label, clientGuid, clientCode: effectiveClientCode, orderGuid, searchGuid, fileNumber: effectiveFileNumber, reviewType, baseReference, analysisReference })}${identityText}${buildCaseTextFromTazworksPayload(payload)}`;
     const analyzerText = capForAnalyzer(fullText);
     const chunks = await getRelevantDocumentChunks(analyzerText, 10);
-    const caseRecord = { review_type: reviewType, subject_name: normalized.applicantName || payload?.displayValue || "TazWorks Result", dob: normalized.dob || null, jurisdiction: normalized.jurisdiction || null, county: null, state: null, source: `TazWorks ${payload?.type || "Search Result"} - ${label}${fileNumber ? ` - File #${fileNumber}` : ""} - ${analyzerLabel(reviewType)}`, external_reference_number: analysisReference, raw_record_text: analyzerText };
+    const caseRecord = { review_type: reviewType, subject_name: effectiveApplicantName, dob: effectiveDob || null, jurisdiction: normalized.jurisdiction || null, county: null, state: null, source: `TazWorks ${payload?.type || "Search Result"} - ${label}${effectiveFileNumber ? ` - File #${effectiveFileNumber}` : ""} - ${analyzerLabel(reviewType)}`, external_reference_number: analysisReference, raw_record_text: analyzerText };
     let output: any;
     try { output = await runOpenAiReview({ caseRecord, chunks }); } catch (aiError: any) { const aiMessage = String(aiError?.message || "AI review failed"); if (!aiMessage.includes("429")) throw aiError; output = rateLimitFallback(reviewType, aiMessage); }
-    const { data: quickRow, error } = await supabase.from("quick_reviews").insert({ review_type: reviewType, source_type: `TazWorks ${payload?.type || "Search Result"} - ${label}${fileNumber ? ` - File #${fileNumber}` : ""} - ${analyzerLabel(reviewType)}`, person_name: normalized.applicantName || payload?.displayValue || null, dob: normalized.dob || null, state: null, county: null, reference_number: analysisReference, charge: null, disposition: null, disposition_date: null, sentence: null, pasted_text: JSON.stringify(storedPayload, null, 2), full_text: fullText, result_json: output, created_by: user.email }).select("id").single();
+    const { data: quickRow, error } = await supabase.from("quick_reviews").insert({ review_type: reviewType, source_type: `TazWorks ${payload?.type || "Search Result"} - ${label}${effectiveFileNumber ? ` - File #${effectiveFileNumber}` : ""} - ${analyzerLabel(reviewType)}`, person_name: effectiveApplicantName || null, dob: effectiveDob || null, state: null, county: null, reference_number: analysisReference, charge: null, disposition: null, disposition_date: null, sentence: null, pasted_text: JSON.stringify(storedPayload, null, 2), full_text: fullText, result_json: output, created_by: user.email }).select("id").single();
     if (error || !quickRow) return NextResponse.redirect(new URL(`${resultUrl}&error=quick_save`, request.url), 303);
-    await supabase.from("tazworks_payloads").insert({ label: `API ${payload?.type || "Search Result"} - ${label}${fileNumber ? ` - File #${fileNumber}` : ""} - ${analyzerLabel(reviewType)}`, payload: storedPayload, applicant_name: normalized.applicantName || null, dob: normalized.dob || null, report_id: analysisReference, record_count: normalized.recordCount || 0, imported_by_email: user.email });
+    await supabase.from("tazworks_payloads").insert({ label: `API ${payload?.type || "Search Result"} - ${label}${effectiveFileNumber ? ` - File #${effectiveFileNumber}` : ""} - ${analyzerLabel(reviewType)}`, payload: storedPayload, applicant_name: effectiveApplicantName || null, dob: effectiveDob || null, report_id: analysisReference, record_count: normalized.recordCount || 0, imported_by_email: user.email });
     if (chunks.length) await supabase.from("quick_review_sources").insert(chunks.map((chunk: any, index: number) => ({ quick_review_id: quickRow.id, source_label: `${index + 1}. ${chunk.documents?.document_name || "Uploaded document"}`, source_excerpt: chunk.chunk_text.slice(0, 900) })));
     await writeAuditLog({ user, action: "tazworks_search_result_imported_read_only", entityType: "quick_review", entityId: quickRow.id, metadata: { ...importContext, searchType: payload?.type || null, aiRateLimited: output?.confidence === 0.1 } });
     return NextResponse.redirect(new URL(`/analyze/${quickRow.id}`, request.url), 303);
