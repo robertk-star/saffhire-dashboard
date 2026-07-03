@@ -72,6 +72,30 @@ function preview(data: any) {
   }
 }
 
+async function getApplicantPages(clientGuid: string) {
+  const pages = [0, 1, 2];
+  const pageResults: any[] = [];
+  const allRows: any[] = [];
+  for (const page of pages) {
+    try {
+      const data = await listTazworksApplicants(clientGuid, page, 500);
+      const pageRows = rows(data);
+      pageResults.push({
+        page,
+        rowCount: pageRows.length,
+        rawDataType: rawType(data),
+        rawIsArray: Array.isArray(data),
+        responseShapeKeys: responseKeys(data),
+        rawPreview: preview(data),
+      });
+      allRows.push(...pageRows);
+    } catch (err: any) {
+      pageResults.push({ page, error: err?.message || "page_pull_failed" });
+    }
+  }
+  return { allRows, pageResults };
+}
+
 export async function GET(request: Request) {
   await requireUser(["admin", "supervisor"]);
   const url = new URL(request.url);
@@ -79,8 +103,7 @@ export async function GET(request: Request) {
   const name = String(url.searchParams.get("name") || "").trim();
   const dob = String(url.searchParams.get("dob") || "").trim();
   if (!clientGuid) return NextResponse.json({ error: "MISSING_CLIENT_GUID" }, { status: 400 });
-  const data = await listTazworksApplicants(clientGuid, 0, 500);
-  const applicantRows = rows(data);
+  const { allRows: applicantRows, pageResults } = await getApplicantPages(clientGuid);
   const dobKey = dateOnly(dob);
   const matches = applicantRows.filter((row: any) => {
     const rowDob = dateOnly(String(row?.dateOfBirth || row?.dob || ""));
@@ -98,10 +121,7 @@ export async function GET(request: Request) {
     matches,
     diagnostics: {
       totalApplicantsSeen: applicantRows.length,
-      responseShapeKeys: responseKeys(data),
-      rawDataType: rawType(data),
-      rawIsArray: Array.isArray(data),
-      rawPreview: preview(data),
+      pagesChecked: pageResults,
       searchedName: name,
       searchedDob: dob,
       dobCandidates,
