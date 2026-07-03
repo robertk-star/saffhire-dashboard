@@ -127,6 +127,18 @@ export async function getTazworksOrder(clientGuid: string, orderGuid: string) {
   return tazworksRequest(`/tazworks/orders/${orderGuid}${proxyClient}`, `/v1/clients/${allowedClientGuid}/orders/${orderGuid}`);
 }
 
+export async function getTazworksApplicantFromOrder(clientGuid: string, orderGuid: string) {
+  const allowedClientGuid = resolveTazworksClientGuid(clientGuid);
+  const proxyClient = allowedClientGuid ? `?clientGuid=${encodeURIComponent(allowedClientGuid)}` : "";
+  return tazworksRequest(`/tazworks/orders/${orderGuid}/applicant/pullFromOrder${proxyClient}`, `/v1/clients/${allowedClientGuid}/order/${orderGuid}/applicant/pullFromOrder`);
+}
+
+export async function getTazworksApplicantAddresses(clientGuid: string, applicantGuid: string) {
+  const allowedClientGuid = resolveTazworksClientGuid(clientGuid);
+  const proxyClient = allowedClientGuid ? `?clientGuid=${encodeURIComponent(allowedClientGuid)}` : "";
+  return tazworksRequest(`/tazworks/applicants/${applicantGuid}/addresses${proxyClient}`, `/v1/clients/${allowedClientGuid}/applicants/${applicantGuid}/addresses`);
+}
+
 export async function listTazworksOrderSearches(clientGuid: string, orderGuid: string) {
   const allowedClientGuid = resolveTazworksClientGuid(clientGuid);
   const proxyClient = allowedClientGuid ? `?clientGuid=${encodeURIComponent(allowedClientGuid)}` : "";
