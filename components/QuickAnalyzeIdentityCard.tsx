@@ -46,6 +46,7 @@ function getIdentity(row: any) {
   const clientLine = lineValue(raw, "Client / Company") || lineValue(raw, "Client") || "";
   const clientCodeLine = lineValue(raw, "Client Code") || "";
   const fileLine = lineValue(raw, "File Number") || "";
+  const applicantGuidLine = lineValue(raw, "Applicant GUID") || "";
   const emailLine = lineValue(raw, "Applicant Email") || "";
   const productLine = lineValue(raw, "Product Name") || "";
   const productGuidLine = lineValue(raw, "Product GUID") || "";
@@ -62,6 +63,7 @@ function getIdentity(row: any) {
       fileNumber: unique(splitValues(fileLine), true),
       client: unique(splitValues(clientLine), true),
       clientCode: unique(splitValues(clientCodeLine), true),
+      applicantGuid: unique(splitValues(applicantGuidLine), true),
       email: unique(splitValues(emailLine), true),
       product: unique(splitValues(productLine), true),
       productGuid: unique(splitValues(productGuidLine), true),
@@ -79,5 +81,5 @@ function IdentityList({ label, values }: { label: string; values: string[] }) {
 
 export function QuickAnalyzeIdentityCard({ row }: { row: any }) {
   const identity = getIdentity(row);
-  return <section className="card" style={{ background: "#f8fafc", borderColor: "#0f3b5f", marginTop: 18, padding: 22 }}><h2 style={{ marginTop: 0 }}>Identity Pulled From File</h2><p style={{ color: "#5d687b", marginTop: 0 }}>Use this to verify the analyzer is comparing records against the right person and client order.</p><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 18 }}><IdentityList label="File Number" values={identity.orderContext.fileNumber} /><IdentityList label="Client / Company" values={identity.orderContext.client} /><IdentityList label="Client Code" values={identity.orderContext.clientCode} /><IdentityList label="Name" values={identity.names} /><IdentityList label="DOB" values={identity.dobs} /><IdentityList label="Applicant Email" values={identity.orderContext.email} /><IdentityList label="Product" values={identity.orderContext.product} /><IdentityList label="Product GUID" values={identity.orderContext.productGuid} /><IdentityList label="Included Searches" values={identity.orderContext.includedSearches} /><IdentityList label="Search Type" values={identity.orderContext.searchType} /><IdentityList label="Search Status" values={identity.orderContext.searchStatus} /><IdentityList label="Alias Names" values={identity.aliases} /><IdentityList label="Address Information" values={identity.addresses} /></div></section>;
+  return <section className="card" style={{ background: "#f8fafc", borderColor: "#0f3b5f", marginTop: 18, padding: 22 }}><h2 style={{ marginTop: 0 }}>Identity Pulled From File</h2><p style={{ color: "#5d687b", marginTop: 0 }}>Use this to verify the analyzer is comparing records against the right person and client order.</p><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 18 }}><IdentityList label="File Number" values={identity.orderContext.fileNumber} /><IdentityList label="Client / Company" values={identity.orderContext.client} /><IdentityList label="Client Code" values={identity.orderContext.clientCode} /><IdentityList label="Applicant GUID" values={identity.orderContext.applicantGuid} /><IdentityList label="Name" values={identity.names} /><IdentityList label="DOB" values={identity.dobs} /><IdentityList label="Applicant Email" values={identity.orderContext.email} /><IdentityList label="Product" values={identity.orderContext.product} /><IdentityList label="Product GUID" values={identity.orderContext.productGuid} /><IdentityList label="Included Searches" values={identity.orderContext.includedSearches} /><IdentityList label="Search Type" values={identity.orderContext.searchType} /><IdentityList label="Search Status" values={identity.orderContext.searchStatus} /><IdentityList label="Alias Names" values={identity.aliases} /><IdentityList label="Address Information" values={identity.addresses} /></div></section>;
 }
