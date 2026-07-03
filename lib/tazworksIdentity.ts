@@ -1,4 +1,4 @@
-import { getTazworksOrder, listTazworksOrderSearches } from "@/lib/tazworks";
+import { getTazworksApplicantFromOrder, getTazworksOrder, listTazworksOrderSearches } from "@/lib/tazworks";
 
 function text(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -23,6 +23,15 @@ function unique(values: string[], limit = 30) {
   }).slice(0, limit);
 }
 
+function fullName(row: any) {
+  return [row?.firstName, row?.middleName, row?.lastName, row?.generation].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+}
+
+function aliasNames(applicant: any) {
+  const aliases = Array.isArray(applicant?.aliases) ? applicant.aliases : [];
+  return aliases.map(fullName).filter(Boolean);
+}
+
 function collectValues(source: any, match: (key: string) => boolean, output: string[] = []) {
   if (!source || typeof source !== "object") return output;
   if (Array.isArray(source)) {
@@ -31,7 +40,7 @@ function collectValues(source: any, match: (key: string) => boolean, output: str
   }
   for (const [key, value] of Object.entries(source)) {
     const normalized = cleanKey(key);
-    const blocked = ["clientguid", "orderguid", "searchguid", "ordersearchguid", "analysisreference", "basereference", "id", "guid"].includes(normalized);
+    const blocked = ["clientguid", "orderguid", "searchguid", "ordersearchguid", "analysisreference", "basereference", "id", "guid", "ssn", "aliasguid"].includes(normalized);
     if (!blocked && match(normalized)) output.push(text(value));
     if (value && typeof value === "object") collectValues(value, match, output);
   }
@@ -62,33 +71,48 @@ function collectAddresses(source: any, output: string[] = []) {
 export async function getTazworksIdentityContext(clientGuid: string, orderGuid: string, searchGuid: string) {
   let orderRow: any = null;
   let searchRow: any = null;
+  let applicantRow: any = null;
   try {
     orderRow = await getTazworksOrder(clientGuid, orderGuid);
+  } catch {}
+  try {
+    applicantRow = await getTazworksApplicantFromOrder(clientGuid, orderGuid);
+    if (orderRow && typeof orderRow === "object") orderRow = { ...orderRow, _saffhireApplicantFromOrder: applicantRow };
   } catch {}
   try {
     const searchesData = await listTazworksOrderSearches(clientGuid, orderGuid);
     const searches = Array.isArray(searchesData) ? searchesData : searchesData?.content || searchesData?.items || searchesData?.searches || [];
     searchRow = searches.find((row: any) => String(row?.orderSearchGuid || row?.searchGuid || row?.id || row?.guid || "") === searchGuid) || null;
   } catch {}
-  return { orderRow, searchRow };
+  return { orderRow, searchRow, applicantRow };
 }
 
-export function buildTazworksIdentityText(input: { payload: any; orderRow: any; searchRow: any; fallbackName: string; fallbackDob: string }) {
+export function buildTazworksIdentityText(input: { payload: any; orderRow: any; searchRow: any; fallbackName: string; fallbackDob: string; applicantRow?: any }) {
   const order = input.orderRow || {};
   const search = input.searchRow || {};
-  const sources = [order, search, input.payload].filter(Boolean);
+  const applicant = input.applicantRow || order._saffhireApplicantFromOrder || {};
+  const sources = [order, applicant, search, input.payload].filter(Boolean);
+  const applicantName = fullName(applicant);
   const names = unique([
     order.applicantName || "",
+    applicantName,
     input.fallbackName,
     ...sources.flatMap((source) => collectValues(source, (key) => ["applicantname", "subjectname", "candidatename", "personname", "fullname", "namesearched", "nameonrecord"].includes(key))),
   ]);
-  const aliases = unique(sources.flatMap((source) => collectValues(source, (key) => key.includes("alias") || key.includes("aka") || key.includes("namevariation") || key.includes("namevariations") || key.includes("othername") || key.includes("previousname"))));
+  const aliases = unique([
+    ...aliasNames(applicant),
+    ...sources.flatMap((source) => collectValues(source, (key) => key.includes("aka") || key.includes("namevariation") || key.includes("namevariations") || key.includes("othername") || key.includes("previousname"))),
+  ]);
   const dobs = unique([
     order.applicantDateOfBirth || "",
+    applicant.dateOfBirth || "",
     input.fallbackDob,
     ...sources.flatMap((source) => collectValues(source, (key) => ["dob", "dateofbirth", "birthdate", "dobsearched", "dobonrecord", "birthdt", "applicantdateofbirth"].includes(key) || key.includes("dateofbirth"))),
   ]);
-  const addresses = unique(sources.flatMap((source) => collectAddresses(source)), 30);
+  const addresses = unique([
+    ...collectAddresses(applicant.addresses || []),
+    ...sources.flatMap((source) => collectAddresses(source)),
+  ], 30);
   const includedSearches = Array.isArray(order.includedSearches) ? order.includedSearches.join("; ") : text(order.includedSearches);
   return [
     "Identity Pulled From TazWorks",
@@ -96,7 +120,8 @@ export function buildTazworksIdentityText(input: { payload: any; orderRow: any; 
     `Client / Company: ${order.clientName || "Not found"}`,
     `Client Code: ${order.clientCode || "Not found"}`,
     `Order Status: ${order.orderStatus || "Not found"}`,
-    `Applicant Email: ${order.applicantEmail || "Not found"}`,
+    `Applicant GUID: ${applicant.applicantGuid || "Not found"}`,
+    `Applicant Email: ${applicant.email || order.applicantEmail || "Not found"}`,
     `Product Name: ${order.productName || "Not found"}`,
     `Product GUID: ${order.clientProductGuid || "Not found"}`,
     `Included Searches: ${includedSearches || "Not found"}`,
@@ -106,7 +131,7 @@ export function buildTazworksIdentityText(input: { payload: any; orderRow: any; 
     `Name Searched: ${names.join("; ") || "Not found"}`,
     `Alias Names: ${aliases.join("; ") || "Not found"}`,
     `DOB: ${dobs.join("; ") || "Not found"}`,
-    `Address History: ${addresses.join("; ") || "Not found - applicant GUID not available from current order/search endpoints"}`,
+    `Address History: ${addresses.join("; ") || "Not found"}`,
     "",
   ].join("\n");
 }
