@@ -31,32 +31,9 @@ function fullName(row: any) {
   return cleanName([row?.firstName, row?.middleName, row?.lastName, row?.generation].filter(Boolean).join(" "));
 }
 
-function firstLast(row: any) {
-  return cleanName([row?.firstName, row?.lastName].filter(Boolean).join(" "));
-}
-
-function firstLastGeneration(row: any, generationOverride?: string) {
-  return cleanName([row?.firstName, row?.lastName, generationOverride || row?.generation].filter(Boolean).join(" "));
-}
-
-function lastFirstGeneration(row: any) {
-  return cleanName([row?.lastName, row?.firstName, row?.generation].filter(Boolean).join(" "));
-}
-
 function aliasNames(applicant: any) {
   const aliases = Array.isArray(applicant?.aliases) ? applicant.aliases : [];
-  const values = [
-    firstLast(applicant),
-    fullName(applicant),
-    firstLastGeneration(applicant),
-    lastFirstGeneration(applicant),
-    ...aliases.flatMap((alias: any) => [firstLast(alias), fullName(alias), firstLastGeneration(alias), lastFirstGeneration(alias)]),
-  ];
-  const generation = String(applicant?.generation || "").trim().toUpperCase();
-  if (generation === "JR" || generation === "JR.") {
-    values.push(firstLastGeneration(applicant, "II"));
-  }
-  return unique(values, 40);
+  return aliases.map(fullName).filter(Boolean);
 }
 
 function collectValues(source: any, match: (key: string) => boolean, output: string[] = []) {
@@ -67,7 +44,7 @@ function collectValues(source: any, match: (key: string) => boolean, output: str
   }
   for (const [key, value] of Object.entries(source)) {
     const normalized = cleanKey(key);
-    const blocked = ["clientguid", "orderguid", "searchguid", "ordersearchguid", "analysisreference", "basereference", "id", "guid", "ssn", "aliasguid"].includes(normalized);
+    const blocked = ["clientguid", "orderguid", "searchguid", "ordersearchguid", "analysisreference", "basereference", "id", "guid", "aliasguid"].includes(normalized);
     if (!blocked && match(normalized)) output.push(text(value));
     if (value && typeof value === "object") collectValues(value, match, output);
   }
