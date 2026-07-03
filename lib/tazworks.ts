@@ -65,8 +65,6 @@ function parseJsonOrText(text: string) {
   try { return text ? JSON.parse(text) : null; } catch { return text; }
 }
 
-// TazWorks integration is intentionally READ-ONLY.
-// This helper only sends GET requests. In proxy mode, Vercel calls the fixed-IP proxy, and the proxy makes GET-only TazWorks calls.
 async function tazworksRequest(proxyPath: string, directPath?: string) {
   if (useProxy()) {
     const proxyBaseUrl = cleanProxyBaseUrl();
@@ -92,6 +90,12 @@ async function tazworksRequest(proxyPath: string, directPath?: string) {
 
 export async function listTazworksClients(page = 0, size = 25) {
   return tazworksRequest(`/tazworks/clients?page=${page}&size=${size}`, `/v1/clients?page=${page}&size=${size}`);
+}
+
+export async function listTazworksApplicants(clientGuid: string, page = 0, size = 100) {
+  const allowedClientGuid = resolveTazworksClientGuid(clientGuid);
+  const proxyClient = allowedClientGuid ? `&clientGuid=${encodeURIComponent(allowedClientGuid)}` : "";
+  return tazworksRequest(`/tazworks/applicants?page=${page}&size=${size}${proxyClient}`, `/v1/clients/${allowedClientGuid}/applicants?page=${page}&size=${size}`);
 }
 
 export function getTazworksClientGuid(row: any) {
@@ -169,41 +173,16 @@ export function normalizeTazworksPayload(payload: any) {
 function offenseText(offense: any) {
   const disposition = offense?.dispositionInfo?.description || offense?.dispositionInfo?.date || offense?.dispositionInfo?.other ? JSON.stringify(offense.dispositionInfo) : "";
   const sentence = offense?.sentenceInfo ? JSON.stringify(offense.sentenceInfo) : "";
-  return [
-    `Type: ${offense?.type || ""}`,
-    `Charge: ${offense?.countOffense || offense?.description || ""}`,
-    `Offense Date: ${offense?.offenseDate || ""}`,
-    `Disposition: ${disposition}`,
-    `Sentence: ${sentence}`,
-  ].filter(Boolean).join("\n");
+  return [`Type: ${offense?.type || ""}`, `Charge: ${offense?.countOffense || offense?.description || ""}`, `Offense Date: ${offense?.offenseDate || ""}`, `Disposition: ${disposition}`, `Sentence: ${sentence}`].filter(Boolean).join("\n");
 }
 
 export function buildCaseTextFromTazworksPayload(payload: any): string {
   const normalized = normalizeTazworksPayload(payload);
   const recordText = normalized.records.map((record: any, index: number) => {
     const offenses = Array.isArray(record?.offenses) ? record.offenses.map(offenseText).join("\n") : "";
-    return [
-      `Record ${index + 1}`,
-      `Source: ${record?.provider || normalized.source || "TazWorks"}`,
-      `Name: ${record?.subject?.fullName || record?.fullName || ""}`,
-      `DOB: ${record?.subject?.dateOfBirth || ""}`,
-      `Case Number: ${record?.caseNumber || ""}`,
-      `Jurisdiction: ${record?.jurisdiction || record?.stateAbbreviation || normalized.jurisdiction || ""}`,
-      `File Date: ${record?.fileDate || ""}`,
-      offenses,
-      JSON.stringify(record, null, 2),
-    ].filter(Boolean).join("\n");
+    return [`Record ${index + 1}`, `Source: ${record?.provider || normalized.source || "TazWorks"}`, `Name: ${record?.subject?.fullName || record?.fullName || ""}`, `DOB: ${record?.subject?.dateOfBirth || ""}`, `Case Number: ${record?.caseNumber || ""}`, `Jurisdiction: ${record?.jurisdiction || record?.stateAbbreviation || normalized.jurisdiction || ""}`, `File Date: ${record?.fileDate || ""}`, offenses, JSON.stringify(record, null, 2)].filter(Boolean).join("\n");
   }).join("\n\n");
-  return [
-    `TazWorks Search Type: ${payload?.type || "Not found"}`,
-    `TazWorks Search ID: ${payload?.orderSearchGuid || "Not found"}`,
-    `Applicant: ${normalized.applicantName || "Not found"}`,
-    `DOB: ${normalized.dob || "Not found"}`,
-    `Jurisdiction: ${normalized.jurisdiction || "Not found"}`,
-    `Record count: ${normalized.recordCount}`,
-    "",
-    recordText || JSON.stringify(payload, null, 2),
-  ].join("\n");
+  return [`TazWorks Search Type: ${payload?.type || "Not found"}`, `TazWorks Search ID: ${payload?.orderSearchGuid || "Not found"}`, `Applicant: ${normalized.applicantName || "Not found"}`, `DOB: ${normalized.dob || "Not found"}`, `Jurisdiction: ${normalized.jurisdiction || "Not found"}`, `Record count: ${normalized.recordCount}`, "", recordText || JSON.stringify(payload, null, 2)].join("\n");
 }
 
 export function reviewTypeFromTazworksPayload(payload: any): "county_search" | "national_crim" {
@@ -212,13 +191,7 @@ export function reviewTypeFromTazworksPayload(payload: any): "county_search" | "
 }
 
 export async function listTazworksPayloads() {
-  try {
-    const supabase = getSupabaseAdmin();
-    const { data } = await supabase.from("tazworks_payloads").select("*").order("created_at", { ascending: false }).limit(100);
-    return data || [];
-  } catch {
-    return [];
-  }
+  try { const supabase = getSupabaseAdmin(); const { data } = await supabase.from("tazworks_payloads").select("*").order("created_at", { ascending: false }).limit(100); return data || []; } catch { return []; }
 }
 
 export async function getTazworksPayload(id: string) {
@@ -232,12 +205,6 @@ export async function getImportedTazworksSearchMap(searchGuids: string[]): Promi
   const unique = Array.from(new Set(searchGuids.filter(Boolean)));
   if (!unique.length) return {};
   const out: Record<string, ImportedTazworksSearch> = {};
-  try {
-    const supabase = getSupabaseAdmin();
-    const { data } = await supabase.from("quick_reviews").select("id,reference_number,created_at").in("reference_number", unique);
-    for (const row of data || []) {
-      if (row.reference_number) out[row.reference_number] = { searchGuid: row.reference_number, quickReviewId: row.id, importedAt: row.created_at };
-    }
-  } catch {}
+  try { const supabase = getSupabaseAdmin(); const { data } = await supabase.from("quick_reviews").select("id,reference_number,created_at").in("reference_number", unique); for (const row of data || []) { if (row.reference_number) out[row.reference_number] = { searchGuid: row.reference_number, quickReviewId: row.id, importedAt: row.created_at }; } } catch {}
   return out;
 }
