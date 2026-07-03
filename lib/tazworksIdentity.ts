@@ -1,4 +1,4 @@
-import { listTazworksOrders, listTazworksOrderSearches } from "@/lib/tazworks";
+import { getTazworksOrder, listTazworksOrderSearches } from "@/lib/tazworks";
 
 function text(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -63,9 +63,7 @@ export async function getTazworksIdentityContext(clientGuid: string, orderGuid: 
   let orderRow: any = null;
   let searchRow: any = null;
   try {
-    const ordersData = await listTazworksOrders(clientGuid, 0, 100);
-    const orders = Array.isArray(ordersData) ? ordersData : ordersData?.content || ordersData?.items || ordersData?.orders || [];
-    orderRow = orders.find((row: any) => String(row?.orderGuid || row?.id || row?.guid || "") === orderGuid) || null;
+    orderRow = await getTazworksOrder(clientGuid, orderGuid);
   } catch {}
   try {
     const searchesData = await listTazworksOrderSearches(clientGuid, orderGuid);
@@ -76,23 +74,39 @@ export async function getTazworksIdentityContext(clientGuid: string, orderGuid: 
 }
 
 export function buildTazworksIdentityText(input: { payload: any; orderRow: any; searchRow: any; fallbackName: string; fallbackDob: string }) {
-  const sources = [input.orderRow, input.searchRow, input.payload].filter(Boolean);
+  const order = input.orderRow || {};
+  const search = input.searchRow || {};
+  const sources = [order, search, input.payload].filter(Boolean);
   const names = unique([
+    order.applicantName || "",
     input.fallbackName,
     ...sources.flatMap((source) => collectValues(source, (key) => ["applicantname", "subjectname", "candidatename", "personname", "fullname", "namesearched", "nameonrecord"].includes(key))),
   ]);
   const aliases = unique(sources.flatMap((source) => collectValues(source, (key) => key.includes("alias") || key.includes("aka") || key.includes("namevariation") || key.includes("namevariations") || key.includes("othername") || key.includes("previousname"))));
   const dobs = unique([
+    order.applicantDateOfBirth || "",
     input.fallbackDob,
-    ...sources.flatMap((source) => collectValues(source, (key) => ["dob", "dateofbirth", "birthdate", "dobsearched", "dobonrecord", "birthdt"].includes(key) || key.includes("dateofbirth"))),
+    ...sources.flatMap((source) => collectValues(source, (key) => ["dob", "dateofbirth", "birthdate", "dobsearched", "dobonrecord", "birthdt", "applicantdateofbirth"].includes(key) || key.includes("dateofbirth"))),
   ]);
   const addresses = unique(sources.flatMap((source) => collectAddresses(source)), 30);
+  const includedSearches = Array.isArray(order.includedSearches) ? order.includedSearches.join("; ") : text(order.includedSearches);
   return [
     "Identity Pulled From TazWorks",
+    `File Number: ${order.fileNumber || "Not found"}`,
+    `Client / Company: ${order.clientName || "Not found"}`,
+    `Client Code: ${order.clientCode || "Not found"}`,
+    `Order Status: ${order.orderStatus || "Not found"}`,
+    `Applicant Email: ${order.applicantEmail || "Not found"}`,
+    `Product Name: ${order.productName || "Not found"}`,
+    `Product GUID: ${order.clientProductGuid || "Not found"}`,
+    `Included Searches: ${includedSearches || "Not found"}`,
+    `Search Type: ${search.displayName || search.type || input.payload?.displayName || input.payload?.type || "Not found"}`,
+    `Search Status: ${search.status || "Not found"}`,
+    `Search Value: ${search.displayValue || input.payload?.displayValue || "Not found"}`,
     `Name Searched: ${names.join("; ") || "Not found"}`,
     `Alias Names: ${aliases.join("; ") || "Not found"}`,
     `DOB: ${dobs.join("; ") || "Not found"}`,
-    `Address History: ${addresses.join("; ") || "Not found"}`,
+    `Address History: ${addresses.join("; ") || "Not found - applicant GUID not available from current order/search endpoints"}`,
     "",
   ].join("\n");
 }
