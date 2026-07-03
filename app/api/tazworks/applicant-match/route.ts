@@ -58,6 +58,20 @@ function responseKeys(data: any) {
   return Object.keys(data).slice(0, 25);
 }
 
+function rawType(data: any) {
+  if (Array.isArray(data)) return "array";
+  if (data === null) return "null";
+  return typeof data;
+}
+
+function preview(data: any) {
+  try {
+    return JSON.stringify(data).slice(0, 1200);
+  } catch {
+    return String(data).slice(0, 1200);
+  }
+}
+
 export async function GET(request: Request) {
   await requireUser(["admin", "supervisor"]);
   const url = new URL(request.url);
@@ -85,6 +99,9 @@ export async function GET(request: Request) {
     diagnostics: {
       totalApplicantsSeen: applicantRows.length,
       responseShapeKeys: responseKeys(data),
+      rawDataType: rawType(data),
+      rawIsArray: Array.isArray(data),
+      rawPreview: preview(data),
       searchedName: name,
       searchedDob: dob,
       dobCandidates,
