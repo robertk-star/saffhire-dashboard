@@ -78,10 +78,11 @@ async function getApplicantPages(clientGuid: string) {
   const allRows: any[] = [];
   for (const page of pages) {
     try {
-      const data = await listTazworksApplicants(clientGuid, page, 500);
+      const data = await listTazworksApplicants(clientGuid, page, 30);
       const pageRows = rows(data);
       pageResults.push({
         page,
+        size: 30,
         rowCount: pageRows.length,
         rawDataType: rawType(data),
         rawIsArray: Array.isArray(data),
@@ -90,7 +91,7 @@ async function getApplicantPages(clientGuid: string) {
       });
       allRows.push(...pageRows);
     } catch (err: any) {
-      pageResults.push({ page, error: err?.message || "page_pull_failed" });
+      pageResults.push({ page, size: 30, error: err?.message || "page_pull_failed" });
     }
   }
   return { allRows, pageResults };
