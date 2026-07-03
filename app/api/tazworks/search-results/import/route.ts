@@ -4,6 +4,7 @@ import { runOpenAiReview } from "@/lib/openaiReview";
 import { requireUser } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { buildCaseTextFromTazworksPayload, getTazworksSearchResult, normalizeTazworksPayload, reviewTypeFromTazworksPayload } from "@/lib/tazworks";
+import { buildTazworksIdentityText, getTazworksIdentityContext } from "@/lib/tazworksIdentity";
 import { writeAuditLog } from "@/lib/audit";
 
 export const runtime = "nodejs";
@@ -100,9 +101,11 @@ export async function POST(request: Request) {
     const supabase = getSupabaseAdmin();
     const label = clientLabel(clientName, clientCode);
     const importContext = { clientGuid, clientName, clientCode, orderGuid, searchGuid, baseReference, analysisReference, fileNumber, reviewType, analyzer: analyzerLabel(reviewType), importedAt: new Date().toISOString(), tazworksMutation: false };
-    const storedPayload = { ...payload, _saffhireImportContext: importContext };
     const normalized = normalizeTazworksPayload(payload);
-    const fullText = `${buildImportHeader({ label, clientGuid, clientCode, orderGuid, searchGuid, fileNumber, reviewType, baseReference, analysisReference })}${buildCaseTextFromTazworksPayload(payload)}`;
+    const identityContext = await getTazworksIdentityContext(clientGuid, orderGuid, searchGuid);
+    const identityText = buildTazworksIdentityText({ payload, orderRow: identityContext.orderRow, searchRow: identityContext.searchRow, fallbackName: normalized.applicantName || payload?.displayValue || "", fallbackDob: normalized.dob || "" });
+    const storedPayload = { ...payload, _saffhireImportContext: importContext, _saffhireOrderContext: identityContext.orderRow, _saffhireSearchContext: identityContext.searchRow };
+    const fullText = `${buildImportHeader({ label, clientGuid, clientCode, orderGuid, searchGuid, fileNumber, reviewType, baseReference, analysisReference })}${identityText}${buildCaseTextFromTazworksPayload(payload)}`;
     const analyzerText = capForAnalyzer(fullText);
     const chunks = await getRelevantDocumentChunks(analyzerText, 10);
     const caseRecord = { review_type: reviewType, subject_name: normalized.applicantName || payload?.displayValue || "TazWorks Result", dob: normalized.dob || null, jurisdiction: normalized.jurisdiction || null, county: null, state: null, source: `TazWorks ${payload?.type || "Search Result"} - ${label}${fileNumber ? ` - File #${fileNumber}` : ""} - ${analyzerLabel(reviewType)}`, external_reference_number: analysisReference, raw_record_text: analyzerText };
