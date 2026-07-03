@@ -8,16 +8,39 @@ function rows(data: any) {
   return Array.isArray(data) ? data : data?.content || data?.items || data?.applicants || [];
 }
 
-function normName(value: string) {
+function clean(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-function normDate(value: string) {
+function dateOnly(value: string) {
   return value.replace(/[^0-9]/g, "");
 }
 
-function fullName(row: any) {
+function tokens(value: string) {
+  return value.toLowerCase().split(/[^a-z0-9]+/).map((token) => token.trim()).filter(Boolean);
+}
+
+function names(row: any) {
   return [row?.firstName, row?.middleName, row?.lastName].filter(Boolean).join(" ").trim();
+}
+
+function nameMatches(inputName: string, row: any) {
+  const inputTokens = tokens(inputName);
+  const first = clean(String(row?.firstName || ""));
+  const middle = clean(String(row?.middleName || ""));
+  const last = clean(String(row?.lastName || ""));
+  const rowFull = clean(names(row));
+  const inputFull = clean(inputName);
+  if (!inputFull) return true;
+  if (rowFull === inputFull || rowFull.includes(inputFull) || inputFull.includes(rowFull)) return true;
+  const firstHit = first ? inputTokens.includes(first) : false;
+  const lastHit = last ? inputTokens.includes(last) : false;
+  if (firstHit && lastHit) return true;
+  const noMiddleRow = `${first}${last}`;
+  const noMiddleInput = inputTokens.length >= 2 ? `${clean(inputTokens[0])}${clean(inputTokens[inputTokens.length - 1])}` : inputFull;
+  if (noMiddleRow && noMiddleInput && noMiddleRow === noMiddleInput) return true;
+  if (middle && inputTokens.includes(middle) && (firstHit || lastHit)) return true;
+  return false;
 }
 
 export async function GET(request: Request) {
@@ -29,14 +52,11 @@ export async function GET(request: Request) {
   if (!clientGuid) return NextResponse.json({ error: "MISSING_CLIENT_GUID" }, { status: 400 });
   const data = await listTazworksApplicants(clientGuid, 0, 500);
   const applicantRows = rows(data);
-  const nameKey = normName(name);
-  const dobKey = normDate(dob);
+  const dobKey = dateOnly(dob);
   const matches = applicantRows.filter((row: any) => {
-    const rowName = normName(fullName(row));
-    const rowDob = normDate(String(row?.dateOfBirth || row?.dob || ""));
-    const nameMatch = nameKey ? rowName === nameKey || rowName.includes(nameKey) || nameKey.includes(rowName) : true;
+    const rowDob = dateOnly(String(row?.dateOfBirth || row?.dob || ""));
     const dobMatch = dobKey ? rowDob === dobKey : true;
-    return nameMatch && dobMatch;
+    return dobMatch && nameMatches(name, row);
   }).slice(0, 10).map((row: any) => ({
     applicantGuid: row?.applicantGuid || row?.guid || row?.id || null,
     firstName: row?.firstName || null,
