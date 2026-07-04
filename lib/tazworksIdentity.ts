@@ -39,7 +39,7 @@ function aliasNames(applicant: any) {
 function isNationalAliasSearch(row: any) {
   const type = String(row?.type || "").toUpperCase();
   const name = String(row?.displayName || "").toUpperCase();
-  return type.includes("NATIONAL_CRIMINAL_DATABASE_ALIAS") || name.includes("NATIONAL") && name.includes("ALIAS");
+  return type.includes("NATIONAL_CRIMINAL_DATABASE_ALIAS") || (name.includes("NATIONAL") && name.includes("ALIAS"));
 }
 
 function hasUsableResult(row: any) {
@@ -101,6 +101,7 @@ export async function getTazworksIdentityContext(clientGuid: string, orderGuid: 
     const nationalAliasSearch = searches.find((row: any) => isNationalAliasSearch(row) && hasUsableResult(row));
     const nationalAliasGuid = String(nationalAliasSearch?.orderSearchGuid || nationalAliasSearch?.searchGuid || nationalAliasSearch?.id || nationalAliasSearch?.guid || "");
     if (nationalAliasGuid) nationalAliasResult = await getTazworksSearchResult(clientGuid, orderGuid, nationalAliasGuid);
+    if (orderRow && typeof orderRow === "object" && nationalAliasResult) orderRow = { ...orderRow, _saffhireNationalAliasResult: nationalAliasResult };
   } catch {}
   return { orderRow, searchRow, applicantRow, nationalAliasResult };
 }
