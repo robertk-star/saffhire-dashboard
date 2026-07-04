@@ -145,7 +145,7 @@ export async function listTazworksOrderSearches(clientGuid: string, orderGuid: s
   return tazworksRequest(`/tazworks/orders/${orderGuid}/searches${proxyClient}`, `/v1/clients/${allowedClientGuid}/orders/${orderGuid}/searches`);
 }
 
-export async function getTazworksSearchResult(clientGuid: string, orderGuid: string, searchGuid: string, resultType = "EDITOR") {
+export async function getTazworksSearchResult(clientGuid: string, orderGuid: string, searchGuid: string, resultType = "") {
   const allowedClientGuid = resolveTazworksClientGuid(clientGuid);
   const params = new URLSearchParams();
   if (resultType) params.set("resultType", resultType);
