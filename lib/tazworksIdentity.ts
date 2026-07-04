@@ -46,6 +46,10 @@ function hasUsableResult(row: any) {
   return String(row?.result || "").toLowerCase() === "yes" || String(row?.status || "").toLowerCase() === "complete";
 }
 
+function isPrimitiveAliasValue(value: unknown) {
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
+}
+
 function collectValues(source: any, match: (key: string) => boolean, output: string[] = []) {
   if (!source || typeof source !== "object") return output;
   if (Array.isArray(source)) {
@@ -54,8 +58,8 @@ function collectValues(source: any, match: (key: string) => boolean, output: str
   }
   for (const [key, value] of Object.entries(source)) {
     const normalized = cleanKey(key);
-    const blocked = ["clientguid", "orderguid", "searchguid", "ordersearchguid", "analysisreference", "basereference", "id", "guid", "aliasguid"].includes(normalized);
-    if (!blocked && match(normalized)) output.push(text(value));
+    const blocked = ["clientguid", "orderguid", "searchguid", "ordersearchguid", "analysisreference", "basereference", "id", "guid", "aliasguid", "ssn"].includes(normalized);
+    if (!blocked && match(normalized) && isPrimitiveAliasValue(value)) output.push(text(value));
     if (value && typeof value === "object") collectValues(value, match, output);
   }
   return output;
