@@ -1,4 +1,4 @@
-import { getTazworksApplicantFromOrder, getTazworksOrder, listTazworksOrderSearches } from "@/lib/tazworks";
+import { getTazworksApplicantFromOrder, getTazworksOrder, getTazworksSearchResult, listTazworksOrderSearches } from "@/lib/tazworks";
 
 function text(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -34,6 +34,16 @@ function fullName(row: any) {
 function aliasNames(applicant: any) {
   const aliases = Array.isArray(applicant?.aliases) ? applicant.aliases : [];
   return aliases.map(fullName).filter(Boolean);
+}
+
+function isNationalAliasSearch(row: any) {
+  const type = String(row?.type || "").toUpperCase();
+  const name = String(row?.displayName || "").toUpperCase();
+  return type.includes("NATIONAL_CRIMINAL_DATABASE_ALIAS") || name.includes("NATIONAL") && name.includes("ALIAS");
+}
+
+function hasUsableResult(row: any) {
+  return String(row?.result || "").toLowerCase() === "yes" || String(row?.status || "").toLowerCase() === "complete";
 }
 
 function collectValues(source: any, match: (key: string) => boolean, output: string[] = []) {
@@ -76,6 +86,7 @@ export async function getTazworksIdentityContext(clientGuid: string, orderGuid: 
   let orderRow: any = null;
   let searchRow: any = null;
   let applicantRow: any = null;
+  let nationalAliasResult: any = null;
   try {
     orderRow = await getTazworksOrder(clientGuid, orderGuid);
   } catch {}
@@ -87,15 +98,19 @@ export async function getTazworksIdentityContext(clientGuid: string, orderGuid: 
     const searchesData = await listTazworksOrderSearches(clientGuid, orderGuid);
     const searches = Array.isArray(searchesData) ? searchesData : searchesData?.content || searchesData?.items || searchesData?.searches || [];
     searchRow = searches.find((row: any) => String(row?.orderSearchGuid || row?.searchGuid || row?.id || row?.guid || "") === searchGuid) || null;
+    const nationalAliasSearch = searches.find((row: any) => isNationalAliasSearch(row) && hasUsableResult(row));
+    const nationalAliasGuid = String(nationalAliasSearch?.orderSearchGuid || nationalAliasSearch?.searchGuid || nationalAliasSearch?.id || nationalAliasSearch?.guid || "");
+    if (nationalAliasGuid) nationalAliasResult = await getTazworksSearchResult(clientGuid, orderGuid, nationalAliasGuid);
   } catch {}
-  return { orderRow, searchRow, applicantRow };
+  return { orderRow, searchRow, applicantRow, nationalAliasResult };
 }
 
-export function buildTazworksIdentityText(input: { payload: any; orderRow: any; searchRow: any; fallbackName: string; fallbackDob: string; applicantRow?: any }) {
+export function buildTazworksIdentityText(input: { payload: any; orderRow: any; searchRow: any; fallbackName: string; fallbackDob: string; applicantRow?: any; nationalAliasResult?: any }) {
   const order = input.orderRow || {};
   const search = input.searchRow || {};
   const applicant = input.applicantRow || order._saffhireApplicantFromOrder || {};
-  const sources = [order, applicant, search, input.payload].filter(Boolean);
+  const nationalAliasResult = input.nationalAliasResult || order._saffhireNationalAliasResult || {};
+  const sources = [order, applicant, nationalAliasResult, search, input.payload].filter(Boolean);
   const applicantName = fullName(applicant);
   const names = unique([
     order.applicantName || "",
@@ -105,7 +120,7 @@ export function buildTazworksIdentityText(input: { payload: any; orderRow: any; 
   ]);
   const aliases = unique([
     ...aliasNames(applicant),
-    ...sources.flatMap((source) => collectValues(source, (key) => key.includes("aka") || key.includes("namevariation") || key.includes("namevariations") || key.includes("othername") || key.includes("previousname"))),
+    ...sources.flatMap((source) => collectValues(source, (key) => key.includes("aka") || key.includes("alias") || key.includes("namevariation") || key.includes("namevariations") || key.includes("othername") || key.includes("previousname"))),
   ], 40);
   const dobs = unique([
     order.applicantDateOfBirth || "",
@@ -129,6 +144,7 @@ export function buildTazworksIdentityText(input: { payload: any; orderRow: any; 
     `Product Name: ${order.productName || "Not found"}`,
     `Product GUID: ${order.clientProductGuid || "Not found"}`,
     `Included Searches: ${includedSearches || "Not found"}`,
+    `National Alias Result Pulled: ${nationalAliasResult?.orderSearchGuid ? "Yes" : "No"}`,
     `Search Type: ${search.displayName || search.type || input.payload?.displayName || input.payload?.type || "Not found"}`,
     `Search Status: ${search.status || "Not found"}`,
     `Search Value: ${search.displayValue || input.payload?.displayValue || "Not found"}`,
