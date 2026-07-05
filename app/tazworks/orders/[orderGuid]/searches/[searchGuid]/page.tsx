@@ -40,7 +40,7 @@ function ManualNationalDatabaseForm({ clientGuid, clientName, clientCode, orderG
 }
 
 export default async function TazworksSearchResultPage({ params, searchParams }: { params: Promise<{ orderGuid: string; searchGuid: string }>; searchParams: Promise<{ clientGuid?: string; clientName?: string; clientCode?: string; fileNumber?: string; error?: string; detail?: string }> }) {
-  const user = await requireUser(["admin", "supervisor"]);
+  const user = await requireUser(["admin", "supervisor", "analyzer"]);
   const { orderGuid, searchGuid } = await params;
   const query = await searchParams;
   const status = getTazworksStatus();
