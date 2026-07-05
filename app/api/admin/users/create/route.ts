@@ -13,7 +13,7 @@ export async function POST(request: Request) {
   const name = String(formData.get("name") || "").trim();
   const role = String(formData.get("role") || "reviewer") as UserRole;
   const accessCode = String(formData.get("accessCode") || "");
-  if (!email || !name || !accessCode || !["admin", "reviewer", "supervisor"].includes(role)) return NextResponse.redirect(new URL("/admin/users?error=missing", request.url), 303);
+  if (!email || !name || !accessCode || !["admin", "reviewer", "supervisor", "analyzer"].includes(role)) return NextResponse.redirect(new URL("/admin/users?error=missing", request.url), 303);
   try {
     const row = await createDashboardUser({ email, name, role, accessCode, actorEmail: user.email });
     await writeAuditLog({ user, action: "dashboard_user_created", entityType: "dashboard_user", entityId: row.id, metadata: { email, role } });
