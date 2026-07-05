@@ -11,7 +11,7 @@ export async function POST(request: Request) {
   const formData = await request.formData();
   const id = String(formData.get("id") || "");
   const role = String(formData.get("role") || "reviewer") as UserRole;
-  if (!id || id.startsWith("env-") || !["admin", "reviewer", "supervisor"].includes(role)) return NextResponse.redirect(new URL("/admin/users?error=role", request.url), 303);
+  if (!id || id.startsWith("env-") || !["admin", "reviewer", "supervisor", "analyzer"].includes(role)) return NextResponse.redirect(new URL("/admin/users?error=role", request.url), 303);
   try {
     const target = await getDashboardUserById(id);
     if (!target) return NextResponse.redirect(new URL("/admin/users?error=role", request.url), 303);
