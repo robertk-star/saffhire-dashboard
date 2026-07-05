@@ -28,18 +28,22 @@ function HeaderMenu({ label, items }: { label: string; items: Array<[string, str
   return <details style={{ position: "relative" }}><summary style={menuButtonStyle}>{label} ▾</summary><div style={menuPanelStyle}>{items.map(([itemLabel, href]) => <Link key={href} href={href} style={{ color: "#0f3b5f", fontWeight: 800 }}>{itemLabel}</Link>)}</div></details>;
 }
 
+function HeaderLogo({ href }: { href: string }) {
+  return <Link href={href} aria-label="SaffHire Background Screening" style={{ alignItems: "center", background: "#ffffff", borderRadius: 12, display: "inline-flex", gap: 8, minWidth: 178, padding: "7px 12px", textDecoration: "none" }}><span style={{ color: "#123aa8", fontSize: 25, fontWeight: 950, letterSpacing: 1, lineHeight: 1 }}>SAFF</span><span style={{ color: "#39df27", fontSize: 25, fontWeight: 950, letterSpacing: 1, lineHeight: 1 }}>HIRE</span><span style={{ color: "#123aa8", display: "block", fontSize: 9, fontWeight: 800, letterSpacing: 2.2, marginLeft: 2, textTransform: "uppercase" }}>Background Screening</span></Link>;
+}
+
 export function AppHeader({ user }: { user: SessionUser }) {
   const analyzerHome = "/tazworks/current-orders";
   if (user.role === "analyzer") {
-    return <div style={{ background: "#0f3b5f", color: "white" }}><div style={{ alignItems: "center", display: "flex", gap: 18, justifyContent: "space-between", margin: "0 auto", maxWidth: 1180, padding: "16px 20px" }}><Link href={analyzerHome} style={{ fontSize: 20, fontWeight: 800 }}>SaffHire Analyzer</Link><nav style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10 }}><Link href={analyzerHome} style={{ fontWeight: 800 }}>Current Orders</Link><Link href="/tazworks/saved-analyses" style={{ fontWeight: 800 }}>Saved Analyses</Link></nav><form action="/api/auth/logout" method="post" style={{ display: "flex", gap: 10, alignItems: "center" }}><span style={{ fontSize: 13 }}>{user.email}</span><button className="btn-secondary" type="submit">Log out</button></form></div></div>;
+    return <div style={{ background: "#0f3b5f", color: "white" }}><div style={{ alignItems: "center", display: "flex", gap: 18, justifyContent: "space-between", margin: "0 auto", maxWidth: 1180, padding: "12px 20px" }}><HeaderLogo href={analyzerHome} /><nav style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10 }}><Link href={analyzerHome} style={{ fontWeight: 800 }}>Current Orders</Link><Link href="/tazworks/saved-analyses" style={{ fontWeight: 800 }}>Saved Analyses</Link></nav><form action="/api/auth/logout" method="post" style={{ display: "flex", gap: 10, alignItems: "center" }}><span style={{ fontSize: 13 }}>{user.email}</span><button className="btn-secondary" type="submit">Log out</button></form></div></div>;
   }
   const reviewItems: Array<[string, string]> = [["Quick Analyze", "/analyze"], ["Cases", "/cases"], ["Documents", "/documents"], ["Supervisor", "/supervisor"]];
   const tazOrderItems: Array<[string, string]> = [["Taz Orders Home", "/tazworks"], ["Pull Orders", "/tazworks/orders"], ["Current Orders", "/tazworks/current-orders"], ["Saved Analyses", "/tazworks/saved-analyses"], ["Manage Clients", "/tazworks/clients"], ["Diagnostics", "/tazworks/diagnostics"], ["Field Mapping", "/tazworks/mapping"], ["Import Sample JSON", "/tazworks/import"]];
   const adminItems: Array<[string, string]> = [["Users", "/admin/users"], ["Audit Logs", "/admin/audit-logs"], ["Settings", "/settings"]];
   return (
     <div style={{ background: "#0f3b5f", color: "white" }}>
-      <div style={{ alignItems: "center", display: "flex", gap: 18, justifyContent: "space-between", margin: "0 auto", maxWidth: 1180, padding: "16px 20px" }}>
-        <Link href="/dashboard" style={{ fontSize: 20, fontWeight: 800 }}>SaffHire Dashboard</Link>
+      <div style={{ alignItems: "center", display: "flex", gap: 18, justifyContent: "space-between", margin: "0 auto", maxWidth: 1180, padding: "12px 20px" }}>
+        <HeaderLogo href="/dashboard" />
         <nav style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 10 }}><Link href="/dashboard" style={{ fontWeight: 800 }}>Dashboard</Link><HeaderMenu label="Review" items={reviewItems} /><HeaderMenu label="Taz Orders" items={tazOrderItems} /><HeaderMenu label="Admin" items={adminItems} /></nav>
         <form action="/api/auth/logout" method="post" style={{ display: "flex", gap: 10, alignItems: "center" }}><span style={{ fontSize: 13 }}>{user.email}</span><button className="btn-secondary" type="submit">Log out</button></form>
       </div>
