@@ -12,5 +12,5 @@ export async function POST(request: Request) {
   if (!user) { await writeAuditLog({ user: null, action: "login_failed", entityType: "auth" }); return NextResponse.redirect(new URL("/login?error=1", request.url), 303); }
   await setSessionCookie(user);
   await writeAuditLog({ user, action: "login_success", entityType: "auth" });
-  return NextResponse.redirect(new URL("/dashboard", request.url), 303);
+  return NextResponse.redirect(new URL(user.role === "analyzer" ? "/tazworks/current-orders" : "/dashboard", request.url), 303);
 }
