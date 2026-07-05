@@ -45,6 +45,6 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
 export async function requireUser(allowedRoles?: UserRole[]): Promise<SessionUser> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (allowedRoles && !allowedRoles.includes(user.role)) redirect("/dashboard");
+  if (allowedRoles && !allowedRoles.includes(user.role)) redirect(user.role === "analyzer" ? "/tazworks/current-orders" : "/dashboard");
   return user;
 }
