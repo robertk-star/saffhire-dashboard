@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { AppHeader } from "@/components/AppHeader";
 import { SetupNotice } from "@/components/SetupNotice";
 import { getDashboardCounts } from "@/lib/cases";
@@ -6,6 +7,7 @@ import { requireUser } from "@/lib/session";
 
 export default async function DashboardPage() {
   const user = await requireUser();
+  if (user.role === "analyzer") redirect("/tazworks/current-orders");
   const counts = await getDashboardCounts();
   const cards = [["Quick Analyze", "Paste", "/analyze"], ["Open Reviews", counts.open, "/cases?status=open"], ["Needs Supervisor Review", counts.supervisor, "/supervisor"], ["Closed Reviews", counts.closed, "/cases?status=closed"], ["Documents Uploaded", counts.documents, "/documents"]];
   const typeCards = [["Criminal Court Reviews", counts.criminalCourt, "/cases?reviewType=criminal_court"], ["National Database Reviews", counts.nationalDatabase, "/cases?reviewType=national_database"], ["All Cases", counts.recent, "/cases"]];
