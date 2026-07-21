@@ -1,0 +1,9 @@
+Upload this folder/file into the GitHub repo root:
+
+app/tazworks/orders/[orderGuid]/searches/[searchGuid]/page.tsx
+
+This build auto-fills National Crim Alias Information and Address Information from the All Search Results proxy route.
+
+SQL migration needed: No
+Vercel ENV needed: No
+Proxy update needed: No, after the DigitalOcean proxy route has already tested successfully.
