@@ -1,15 +1,14 @@
-UPLOAD THESE FILES TO GITHUB
+Upload/replace this file in the GitHub repo:
 
-Replace this file:
 app/tazworks/orders/[orderGuid]/searches/[searchGuid]/page.tsx
 
 What changed:
-- Removed the page-level fallback to process.env.TAZWORKS_CLIENT_GUID.
-- The search detail page now requires and uses the actual clientGuid passed in the URL.
-- The National Crim page now uses the existing lib/tazworks.ts getAllTazworksSearchResults helper.
-- Added a warning if the page is opened without a clientGuid.
+- County Criminal Search Analysis now pulls the same National Alias identity context used by National Crim.
+- Alias Information pulls from All Search Results -> NATIONAL_CRIMINAL_DATABASE_ALIAS -> results.nameVariationsSearched.
+- Address Information pulls from All Search Results -> NATIONAL_CRIMINAL_DATABASE_ALIAS -> results.addressInfos.
+- County Vendor Records still come from the selected county search result.
+- The page no longer falls back to TAZWORKS_CLIENT_GUID when the URL is missing clientGuid; it shows a warning instead so the wrong client is not used.
 
-Why:
-- The proxy default client GUID is only a fallback.
-- For multiple TazWorks clients, each order/search page must pass the selected order's actual clientGuid.
-- If the wrong clientGuid is used, All Search Results will not return alias/address data.
+SQL migration needed: No
+Vercel ENV needed: No
+Proxy update needed: No
