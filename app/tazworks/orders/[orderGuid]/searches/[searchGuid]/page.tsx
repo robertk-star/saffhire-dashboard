@@ -104,6 +104,67 @@ function formatNationalVendorRecords(nationalSearch: any) {
   return "";
 }
 
+function formatApplicantAliases(applicant: any) {
+  const aliases = Array.isArray(applicant?.aliases) ? applicant.aliases : [];
+  if (!aliases.length) return "";
+
+  return aliases
+    .map((alias: any) => {
+      const name = [alias?.firstName, alias?.middleName, alias?.lastName, alias?.generation].map(valueText).filter(Boolean).join(" ");
+      const dob = valueText(alias?.dateOfBirth || alias?.dob);
+      return [name ? `Alias: ${name}` : "", dob ? `DOB: ${dob}` : ""].filter(Boolean).join(" | ");
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+function formatApplicantAddresses(applicant: any) {
+  const addresses = Array.isArray(applicant?.addresses) ? applicant.addresses : [];
+  if (!addresses.length) return "";
+
+  return addresses
+    .map((address: any) => {
+      const location = [address?.streetOne, address?.streetTwo, address?.city, address?.stateOrProvince || address?.state, address?.postalCode].map(valueText).filter(Boolean).join(", ");
+      const county = valueText(address?.county);
+      const startDate = valueText(address?.startDate || address?.fromDate || address?.dateFrom);
+      const endDate = valueText(address?.endDate || address?.toDate || address?.dateTo);
+      const dates = startDate || endDate ? `Dates: ${startDate || "Unknown"} to ${endDate || "Unknown"}` : "";
+      return [location, county ? `County: ${county}` : "", dates].filter(Boolean).join(" | ");
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+function formatSelectedSearchVendorRecords(search: any, mode: Mode) {
+  const results = search?.results;
+  const recordCandidates = [
+    results?.records,
+    results?.recordDetails,
+    results?.criminalRecords,
+    results?.countyRecords,
+    results?.cases,
+    results?.offenses,
+    results?.charges,
+    results?.hits,
+    results?.items,
+  ];
+  const records = recordCandidates.find((candidate) => Array.isArray(candidate) && candidate.length);
+
+  if (Array.isArray(records) && records.length) {
+    return JSON.stringify(records, null, 2);
+  }
+
+  if (results && typeof results === "object" && Object.keys(results).length) {
+    return JSON.stringify(results, null, 2);
+  }
+
+  const result = String(search?.result || "").toLowerCase();
+  if (mode === "county" && result === "no") {
+    return "No county criminal hit records returned for the selected County Criminal Search.";
+  }
+
+  return "";
+}
 
 function buildCombinedSourceText(input: {
   fileNumber: string;
@@ -170,7 +231,7 @@ function ManualAnalysisForm({
   const title = mode === "national" ? "National Database Analysis" : "County Criminal Search Analysis";
   const helpText = mode === "national"
     ? "Review the auto-filled alias and address data before running the National Crim analysis."
-    : "Review county vendor records and decide whether each county record should be reported.";
+    : "Review the auto-filled identity context and county vendor records before deciding whether each county record should be reported.";
   const fileNumber = firstValue(order?.fileNumber, order?.file_number, order?.referenceNumber);
   const clientName = firstValue(order?.clientName, order?.client_name, order?.companyName);
   const clientCode = firstValue(order?.clientCode, order?.client_code);
@@ -181,7 +242,45 @@ function ManualAnalysisForm({
   const displayValue = firstValue(search?.displayValue);
   const combinedText = buildCombinedSourceText({ fileNumber, clientName, clientCode, orderGuid, searchGuid, searchType, displayName, displayValue, personName, dob, aliasInformation, addressInformation, vendorRecords });
 
-  return <section className="card" style={{ marginTop: 18, padding: 22 }}><h1 style={{ marginTop: 0 }}>{title}</h1><p style={{ color: "#5d687b" }}>{helpText}</p><form action="/api/analyze/quick" method="post" style={{ display: "grid", gap: 14 }}><input type="hidden" name="review_type" value={reviewType} /><input type="hidden" name="reviewType" value={reviewType} /><input type="hidden" name="source_type" value="tazworks" /><input type="hidden" name="sourceType" value="tazworks" /><input type="hidden" name="reference_number" value={searchGuid} /><input type="hidden" name="referenceNumber" value={searchGuid} /><input type="hidden" name="order_guid" value={orderGuid} /><input type="hidden" name="orderGuid" value={orderGuid} /><input type="hidden" name="search_guid" value={searchGuid} /><input type="hidden" name="searchGuid" value={searchGuid} /><input type="hidden" name="client_guid" value={clientGuid} /><input type="hidden" name="clientGuid" value={clientGuid} /><input type="hidden" name="search_type" value={searchType} /><input type="hidden" name="searchType" value={searchType} /><input type="hidden" name="client" value={clientName} /><input type="hidden" name="client_name" value={clientName} /><input type="hidden" name="client_code" value={clientCode} /><input type="hidden" name="pasted_text" value={combinedText} /><input type="hidden" name="full_text" value={combinedText} /><input type="hidden" name="text" value={combinedText} /><div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}><label><span className="field-label">File Number</span><input className="field-input" name="file_number" defaultValue={fileNumber} /></label><label><span className="field-label">Name</span><input className="field-input" name="person_name" defaultValue={personName} /></label><label><span className="field-label">DOB</span><input className="field-input" name="dob" defaultValue={dob} /></label></div>{mode === "national" ? <><label><span className="field-label">Alias Information</span><textarea className="field-input" name="alias_information" defaultValue={aliasInformation} rows={5} /></label><label><span className="field-label">Address Information</span><textarea className="field-input" name="address_information" defaultValue={addressInformation} rows={10} /></label><label><span className="field-label">Vendor Records</span><textarea className="field-input" name="vendor_records" defaultValue={vendorRecords} rows={8} /></label></> : <><label><span className="field-label">Alias Information</span><textarea className="field-input" name="alias_information" defaultValue={aliasInformation} rows={4} /></label><label><span className="field-label">Address Information</span><textarea className="field-input" name="address_information" defaultValue={addressInformation} rows={5} /></label><label><span className="field-label">County Vendor Records</span><textarea className="field-input" name="vendor_records" defaultValue={vendorRecords} rows={12} placeholder="Include case number, court, county/state, charge, offense date, disposition, disposition date, sentence, and status." /></label></>}<button className="btn-primary" type="submit">Analyze</button></form></section>;
+  return (
+    <section className="card" style={{ marginTop: 18, padding: 22 }}>
+      <h1 style={{ marginTop: 0 }}>{title}</h1>
+      <p style={{ color: "#5d687b" }}>{helpText}</p>
+      <form action="/api/analyze/quick" method="post" style={{ display: "grid", gap: 14 }}>
+        <input type="hidden" name="review_type" value={reviewType} />
+        <input type="hidden" name="reviewType" value={reviewType} />
+        <input type="hidden" name="source_type" value="tazworks" />
+        <input type="hidden" name="sourceType" value="tazworks" />
+        <input type="hidden" name="reference_number" value={searchGuid} />
+        <input type="hidden" name="referenceNumber" value={searchGuid} />
+        <input type="hidden" name="order_guid" value={orderGuid} />
+        <input type="hidden" name="orderGuid" value={orderGuid} />
+        <input type="hidden" name="search_guid" value={searchGuid} />
+        <input type="hidden" name="searchGuid" value={searchGuid} />
+        <input type="hidden" name="client_guid" value={clientGuid} />
+        <input type="hidden" name="clientGuid" value={clientGuid} />
+        <input type="hidden" name="search_type" value={searchType} />
+        <input type="hidden" name="searchType" value={searchType} />
+        <input type="hidden" name="client" value={clientName} />
+        <input type="hidden" name="client_name" value={clientName} />
+        <input type="hidden" name="client_code" value={clientCode} />
+        <input type="hidden" name="pasted_text" value={combinedText} />
+        <input type="hidden" name="full_text" value={combinedText} />
+        <input type="hidden" name="text" value={combinedText} />
+
+        <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+          <label><span className="field-label">File Number</span><input className="field-input" name="file_number" defaultValue={fileNumber} /></label>
+          <label><span className="field-label">Name</span><input className="field-input" name="person_name" defaultValue={personName} /></label>
+          <label><span className="field-label">DOB</span><input className="field-input" name="dob" defaultValue={dob} /></label>
+        </div>
+
+        <label><span className="field-label">Alias Information</span><textarea className="field-input" name="alias_information" defaultValue={aliasInformation} rows={mode === "national" ? 5 : 4} /></label>
+        <label><span className="field-label">Address Information</span><textarea className="field-input" name="address_information" defaultValue={addressInformation} rows={mode === "national" ? 10 : 6} /></label>
+        <label><span className="field-label">{mode === "national" ? "Vendor Records" : "County Vendor Records"}</span><textarea className="field-input" name="vendor_records" defaultValue={vendorRecords} rows={mode === "national" ? 8 : 12} placeholder={mode === "county" ? "Include case number, court, county/state, charge, offense date, disposition, disposition date, sentence, and status." : undefined} /></label>
+        <button className="btn-primary" type="submit">Analyze</button>
+      </form>
+    </section>
+  );
 }
 
 export default async function TazworksSearchDetailPage({ params, searchParams }: { params: Promise<{ orderGuid: string; searchGuid: string }>; searchParams: Promise<{ clientGuid?: string }> }) {
@@ -203,15 +302,29 @@ export default async function TazworksSearchDetailPage({ params, searchParams }:
   let addressInformation = "";
   let vendorRecords = "";
 
-  if (nationalAlias) {
-    const allSearchResults = await getAllTazworksSearchResults(clientGuid, orderGuid).catch((err: unknown) => { console.error("Could not load all search results for National Alias", err); return null; });
-    const nationalAliasSearch = findNationalAliasSearch(allSearchResults) || search;
-    aliasInformation = valueText(nationalAliasSearch?.results?.nameVariationsSearched);
-    addressInformation = formatAddressInfos(nationalAliasSearch?.results?.addressInfos || []);
-    vendorRecords = formatNationalVendorRecords(nationalAliasSearch);
+  if (nationalAlias || countyCriminal) {
+    const allSearchResults = clientGuid
+      ? await getAllTazworksSearchResults(clientGuid, orderGuid).catch((err: unknown) => { console.error("Could not load all search results for identity context", err); return null; })
+      : null;
+    const nationalAliasSearch = findNationalAliasSearch(allSearchResults);
+    aliasInformation = valueText(nationalAliasSearch?.results?.nameVariationsSearched) || formatApplicantAliases(applicant);
+    addressInformation = formatAddressInfos(nationalAliasSearch?.results?.addressInfos || []) || formatApplicantAddresses(applicant);
+    vendorRecords = nationalAlias ? formatNationalVendorRecords(nationalAliasSearch || search) : formatSelectedSearchVendorRecords(search, "county");
   }
 
   const backHref = user.role === "analyzer" ? "/tazworks/current-orders" : `/tazworks/orders/${orderGuid}${clientGuid ? `?clientGuid=${encodeURIComponent(clientGuid)}` : ""}`;
 
-  return <><AppHeader user={user} /><main className="container-shell"><div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}><Link href={backHref} style={{ color: "#0f3b5f", fontWeight: 700 }}>← Back</Link><Link href="/tazworks/saved-analyses" style={{ color: "#0f3b5f", fontWeight: 700 }}>Saved Analyses</Link></div>{!clientGuid ? <section className="card" style={{ background: "#fff7ed", borderColor: "#fdba74", color: "#9a3412", fontWeight: 700, marginBottom: 18, padding: 16 }}>Missing client GUID. Go back to Current Orders or the Order page and open this search again so the correct client is passed to TazWorks.</section> : null}{manualMode ? <ManualAnalysisForm mode={manualMode} orderGuid={orderGuid} searchGuid={searchGuid} clientGuid={clientGuid} search={search} order={order} applicant={applicant} aliasInformation={aliasInformation} addressInformation={addressInformation} vendorRecords={vendorRecords} /> : <section className="card" style={{ marginTop: 18, padding: 22 }}><h1 style={{ marginTop: 0 }}>{firstValue(search?.displayName, "Search Detail")}</h1><p style={{ color: "#5d687b" }}>{firstValue(search?.displayValue)}</p><pre style={{ background: "#f8fafc", borderRadius: 12, overflow: "auto", padding: 16, whiteSpace: "pre-wrap" }}>{JSON.stringify(search, null, 2)}</pre></section>}</main></>;
+  return (
+    <>
+      <AppHeader user={user} />
+      <main className="container-shell">
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+          <Link href={backHref} style={{ color: "#0f3b5f", fontWeight: 700 }}>← Back</Link>
+          <Link href="/tazworks/saved-analyses" style={{ color: "#0f3b5f", fontWeight: 700 }}>Saved Analyses</Link>
+        </div>
+        {!clientGuid ? <section className="card" style={{ borderColor: "#fda29b", background: "#fff5f5", color: "#b42318", fontWeight: 700, marginBottom: 18, padding: 16 }}>Missing client GUID. Go back to Current Orders or Orders and reopen this search so the correct client is passed through.</section> : null}
+        {manualMode ? <ManualAnalysisForm mode={manualMode} orderGuid={orderGuid} searchGuid={searchGuid} clientGuid={clientGuid} search={search} order={order} applicant={applicant} aliasInformation={aliasInformation} addressInformation={addressInformation} vendorRecords={vendorRecords} /> : <section className="card" style={{ marginTop: 18, padding: 22 }}><h1 style={{ marginTop: 0 }}>{firstValue(search?.displayName, "Search Detail")}</h1><p style={{ color: "#5d687b" }}>{firstValue(search?.displayValue)}</p><pre style={{ background: "#f8fafc", borderRadius: 12, overflow: "auto", padding: 16, whiteSpace: "pre-wrap" }}>{JSON.stringify(search, null, 2)}</pre></section>}
+      </main>
+    </>
+  );
 }
