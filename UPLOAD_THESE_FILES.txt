@@ -1,9 +1,15 @@
-Upload this folder/file into the GitHub repo root:
+UPLOAD THESE FILES TO GITHUB
 
+Replace this file:
 app/tazworks/orders/[orderGuid]/searches/[searchGuid]/page.tsx
 
-This build auto-fills National Crim Alias Information and Address Information from the All Search Results proxy route.
+What changed:
+- Removed the page-level fallback to process.env.TAZWORKS_CLIENT_GUID.
+- The search detail page now requires and uses the actual clientGuid passed in the URL.
+- The National Crim page now uses the existing lib/tazworks.ts getAllTazworksSearchResults helper.
+- Added a warning if the page is opened without a clientGuid.
 
-SQL migration needed: No
-Vercel ENV needed: No
-Proxy update needed: No, after the DigitalOcean proxy route has already tested successfully.
+Why:
+- The proxy default client GUID is only a fallback.
+- For multiple TazWorks clients, each order/search page must pass the selected order's actual clientGuid.
+- If the wrong clientGuid is used, All Search Results will not return alias/address data.
