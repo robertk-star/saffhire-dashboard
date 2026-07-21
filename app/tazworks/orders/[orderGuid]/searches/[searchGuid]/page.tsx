@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AppHeader } from "@/components/AppHeader";
 import { requireUser } from "@/lib/session";
 import {
+  getAllTazworksSearchResults,
   getTazworksApplicantFromOrder,
   getTazworksOrder,
   getTazworksSearchResult,
@@ -103,28 +104,6 @@ function formatNationalVendorRecords(nationalSearch: any) {
   return "";
 }
 
-async function getTazworksAllSearchResults(orderGuid: string, clientGuid?: string) {
-  const proxyUrl = process.env.TAZWORKS_PROXY_URL || process.env.TAZWORKS_PROXY_BASE_URL || "";
-  const proxySecret = process.env.TAZWORKS_PROXY_SECRET || "";
-
-  if (!proxyUrl || !proxySecret) return null;
-
-  const url = new URL(`/tazworks/orders/${encodeURIComponent(orderGuid)}/searches/results`, proxyUrl);
-  if (clientGuid) url.searchParams.set("clientGuid", clientGuid);
-
-  const response = await fetch(url.toString(), {
-    headers: { Authorization: `Bearer ${proxySecret}` },
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    console.error("All Search Results proxy call failed", response.status, detail.slice(0, 500));
-    return null;
-  }
-
-  return response.json();
-}
 
 function buildCombinedSourceText(input: {
   fileNumber: string;
@@ -209,13 +188,13 @@ export default async function TazworksSearchDetailPage({ params, searchParams }:
   const user = await requireUser(["admin", "supervisor", "analyzer"]);
   const { orderGuid, searchGuid } = await params;
   const query = await searchParams;
-  const clientGuid = query.clientGuid || process.env.TAZWORKS_CLIENT_GUID || "";
+  const clientGuid = query.clientGuid || "";
 
-  const [search, order, applicant] = await Promise.all([
+  const [search, order, applicant] = clientGuid ? await Promise.all([
     getTazworksSearchResult(clientGuid, orderGuid, searchGuid).catch((err: unknown) => { console.error("Search result load failed", err); return null; }),
     getTazworksOrder(clientGuid, orderGuid).catch((err: unknown) => { console.error("Order detail load failed", err); return null; }),
     getTazworksApplicantFromOrder(clientGuid, orderGuid).catch((err: unknown) => { console.error("Applicant pull from order failed", err); return null; }),
-  ]);
+  ]) : [null, null, null];
 
   const nationalAlias = isNationalAlias(search);
   const countyCriminal = isCountyCriminal(search);
@@ -225,7 +204,7 @@ export default async function TazworksSearchDetailPage({ params, searchParams }:
   let vendorRecords = "";
 
   if (nationalAlias) {
-    const allSearchResults = await getTazworksAllSearchResults(orderGuid, clientGuid).catch((err: unknown) => { console.error("Could not load all search results for National Alias", err); return null; });
+    const allSearchResults = await getAllTazworksSearchResults(clientGuid, orderGuid).catch((err: unknown) => { console.error("Could not load all search results for National Alias", err); return null; });
     const nationalAliasSearch = findNationalAliasSearch(allSearchResults) || search;
     aliasInformation = valueText(nationalAliasSearch?.results?.nameVariationsSearched);
     addressInformation = formatAddressInfos(nationalAliasSearch?.results?.addressInfos || []);
@@ -234,5 +213,5 @@ export default async function TazworksSearchDetailPage({ params, searchParams }:
 
   const backHref = user.role === "analyzer" ? "/tazworks/current-orders" : `/tazworks/orders/${orderGuid}${clientGuid ? `?clientGuid=${encodeURIComponent(clientGuid)}` : ""}`;
 
-  return <><AppHeader user={user} /><main className="container-shell"><div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}><Link href={backHref} style={{ color: "#0f3b5f", fontWeight: 700 }}>← Back</Link><Link href="/tazworks/saved-analyses" style={{ color: "#0f3b5f", fontWeight: 700 }}>Saved Analyses</Link></div>{manualMode ? <ManualAnalysisForm mode={manualMode} orderGuid={orderGuid} searchGuid={searchGuid} clientGuid={clientGuid} search={search} order={order} applicant={applicant} aliasInformation={aliasInformation} addressInformation={addressInformation} vendorRecords={vendorRecords} /> : <section className="card" style={{ marginTop: 18, padding: 22 }}><h1 style={{ marginTop: 0 }}>{firstValue(search?.displayName, "Search Detail")}</h1><p style={{ color: "#5d687b" }}>{firstValue(search?.displayValue)}</p><pre style={{ background: "#f8fafc", borderRadius: 12, overflow: "auto", padding: 16, whiteSpace: "pre-wrap" }}>{JSON.stringify(search, null, 2)}</pre></section>}</main></>;
+  return <><AppHeader user={user} /><main className="container-shell"><div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}><Link href={backHref} style={{ color: "#0f3b5f", fontWeight: 700 }}>← Back</Link><Link href="/tazworks/saved-analyses" style={{ color: "#0f3b5f", fontWeight: 700 }}>Saved Analyses</Link></div>{!clientGuid ? <section className="card" style={{ background: "#fff7ed", borderColor: "#fdba74", color: "#9a3412", fontWeight: 700, marginBottom: 18, padding: 16 }}>Missing client GUID. Go back to Current Orders or the Order page and open this search again so the correct client is passed to TazWorks.</section> : null}{manualMode ? <ManualAnalysisForm mode={manualMode} orderGuid={orderGuid} searchGuid={searchGuid} clientGuid={clientGuid} search={search} order={order} applicant={applicant} aliasInformation={aliasInformation} addressInformation={addressInformation} vendorRecords={vendorRecords} /> : <section className="card" style={{ marginTop: 18, padding: 22 }}><h1 style={{ marginTop: 0 }}>{firstValue(search?.displayName, "Search Detail")}</h1><p style={{ color: "#5d687b" }}>{firstValue(search?.displayValue)}</p><pre style={{ background: "#f8fafc", borderRadius: 12, overflow: "auto", padding: 16, whiteSpace: "pre-wrap" }}>{JSON.stringify(search, null, 2)}</pre></section>}</main></>;
 }
