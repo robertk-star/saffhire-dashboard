@@ -57,6 +57,12 @@ async function internalTazworksRequest(proxyPath: string, directPath: string) {
   return data;
 }
 
+function requireGuid(value: string, label: string) {
+  const guid = String(value || "").trim();
+  if (!guid) throw new Error(`${label} is required.`);
+  return guid;
+}
+
 export function normalizeTazworksClientListInternal(data: any): TazworksClientOption[] {
   const rows = Array.isArray(data) ? data : data?.content || data?.items || data?.clients || [];
   return rows.map((row: any) => {
@@ -75,10 +81,59 @@ export async function listTazworksClientsInternal(page = 0, size = 100) {
 }
 
 export async function listTazworksOrdersInternal(clientGuid: string, page = 0, size = 100) {
-  const guid = String(clientGuid || "").trim();
-  if (!guid) throw new Error("TazWorks client GUID is required.");
+  const guid = requireGuid(clientGuid, "TazWorks client GUID");
   return internalTazworksRequest(
     `/tazworks/orders?page=${page}&size=${size}&clientGuid=${encodeURIComponent(guid)}`,
     `/v1/clients/${encodeURIComponent(guid)}/orders?page=${page}&size=${size}`,
+  );
+}
+
+export async function listTazworksOrderSearchesInternal(clientGuid: string, orderGuid: string) {
+  const client = requireGuid(clientGuid, "TazWorks client GUID");
+  const order = requireGuid(orderGuid, "TazWorks order GUID");
+  return internalTazworksRequest(
+    `/tazworks/orders/${encodeURIComponent(order)}/searches?clientGuid=${encodeURIComponent(client)}`,
+    `/v1/clients/${encodeURIComponent(client)}/orders/${encodeURIComponent(order)}/searches`,
+  );
+}
+
+export async function getTazworksOrderInternal(clientGuid: string, orderGuid: string) {
+  const client = requireGuid(clientGuid, "TazWorks client GUID");
+  const order = requireGuid(orderGuid, "TazWorks order GUID");
+  return internalTazworksRequest(
+    `/tazworks/orders/${encodeURIComponent(order)}?clientGuid=${encodeURIComponent(client)}`,
+    `/v1/clients/${encodeURIComponent(client)}/orders/${encodeURIComponent(order)}`,
+  );
+}
+
+export async function getTazworksApplicantFromOrderInternal(clientGuid: string, orderGuid: string) {
+  const client = requireGuid(clientGuid, "TazWorks client GUID");
+  const order = requireGuid(orderGuid, "TazWorks order GUID");
+  return internalTazworksRequest(
+    `/tazworks/orders/${encodeURIComponent(order)}/applicant/pullFromOrder?clientGuid=${encodeURIComponent(client)}`,
+    `/v1/clients/${encodeURIComponent(client)}/order/${encodeURIComponent(order)}/applicant/pullFromOrder`,
+  );
+}
+
+export async function getTazworksSearchResultInternal(clientGuid: string, orderGuid: string, searchGuid: string, resultType = "") {
+  const client = requireGuid(clientGuid, "TazWorks client GUID");
+  const order = requireGuid(orderGuid, "TazWorks order GUID");
+  const search = requireGuid(searchGuid, "TazWorks search GUID");
+  const params = new URLSearchParams();
+  params.set("clientGuid", client);
+  if (resultType) params.set("resultType", resultType);
+  const directSuffix = resultType ? `?resultType=${encodeURIComponent(resultType)}` : "";
+  return internalTazworksRequest(
+    `/tazworks/orders/${encodeURIComponent(order)}/searches/${encodeURIComponent(search)}/results?${params.toString()}`,
+    `/v1/clients/${encodeURIComponent(client)}/orders/${encodeURIComponent(order)}/searches/${encodeURIComponent(search)}/results${directSuffix}`,
+  );
+}
+
+export async function getAllTazworksSearchResultsInternal(clientGuid: string, orderGuid: string) {
+  const client = requireGuid(clientGuid, "TazWorks client GUID");
+  const order = requireGuid(orderGuid, "TazWorks order GUID");
+  return internalTazworksRequest(
+    `/tazworks/orders/${encodeURIComponent(order)}/searches/results?clientGuid=${encodeURIComponent(client)}`,
+    `/v1/clients/${encodeURIComponent(client)}/orders/${encodeURIComponent(order)}/searches/results`,
   );
 }
