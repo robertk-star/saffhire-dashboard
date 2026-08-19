@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { AppHeader } from "@/components/AppHeader";
 import { requireUser } from "@/lib/session";
-import { getDefaultTazworksClientGuid, getTazworksStatus, listTazworksClients, listTazworksOrders, normalizeTazworksClientList } from "@/lib/tazworks";
-import { filterTazworksClientOptions } from "@/lib/tazworksAccess";
+import { getDefaultTazworksClientGuid, getTazworksStatus } from "@/lib/tazworks";
+import { listTazworksClientsInternal, listTazworksOrdersInternal, normalizeTazworksClientListInternal } from "@/lib/tazworksInternal";
 import { listTazworksSavedClients } from "@/lib/tazworksSavedClients";
 
 function cleanStatus(value: any) {
@@ -52,12 +52,12 @@ export default async function CurrentOrdersPage({ searchParams }: { searchParams
   const statusFilter = String(params.status || "all");
   const savedRows = await listTazworksSavedClients(false).catch(() => []);
   const clientMap = new Map<string, { guid: string; name: string; code: string; label: string; source: string }>();
-  const savedClients = filterTazworksClientOptions(savedRows.map((client) => ({ guid: client.client_guid, name: client.name, code: client.client_code || "", label: client.client_code ? `${client.name} (${client.client_code})` : client.name, source: "Saved" })));
-  for (const client of savedClients) clientMap.set(client.guid, client);
+  const savedClients = savedRows.map((client) => ({ guid: client.client_guid, name: client.name, code: client.client_code || "", label: client.client_code ? `${client.name} (${client.client_code})` : client.name, source: "Saved" }));
+  for (const client of savedClients) if (client.guid) clientMap.set(client.guid, client);
   let liveClientError = "";
   try {
-    const liveData = await listTazworksClients(0, 100);
-    const liveClients = normalizeTazworksClientList(liveData).map((client) => ({ guid: client.guid, name: client.name, code: client.code, label: client.label, source: "Live" }));
+    const liveData = await listTazworksClientsInternal(0, 100);
+    const liveClients = normalizeTazworksClientListInternal(liveData).map((client) => ({ guid: client.guid, name: client.name, code: client.code, label: client.label, source: "Live" }));
     for (const client of liveClients) if (!clientMap.has(client.guid)) clientMap.set(client.guid, client);
   } catch (err: any) {
     liveClientError = err?.message || "live_clients_failed";
@@ -72,7 +72,7 @@ export default async function CurrentOrdersPage({ searchParams }: { searchParams
   const errors: string[] = [];
   for (const client of clients) {
     try {
-      const data = await listTazworksOrders(client.guid, 0, size);
+      const data = await listTazworksOrdersInternal(client.guid, 0, size);
       const rows = Array.isArray(data) ? data : data?.content || data?.items || data?.orders || [];
       for (const row of rows) if (isCurrent(row) && matchesStatusFilter(row, statusFilter)) orders.push({ ...row, _clientGuid: client.guid, _clientName: row.clientName || client.name, _clientCode: row.clientCode || client.code, _clientLabel: client.label, _clientSource: client.source });
     } catch {
