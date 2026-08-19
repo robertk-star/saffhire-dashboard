@@ -2,11 +2,11 @@ import Link from "next/link";
 import { AppHeader } from "@/components/AppHeader";
 import { requireUser } from "@/lib/session";
 import {
-  getAllTazworksSearchResults,
-  getTazworksApplicantFromOrder,
-  getTazworksOrder,
-  getTazworksSearchResult,
-} from "@/lib/tazworks";
+  getAllTazworksSearchResultsInternal,
+  getTazworksApplicantFromOrderInternal,
+  getTazworksOrderInternal,
+  getTazworksSearchResultInternal,
+} from "@/lib/tazworksInternal";
 
 type Mode = "national" | "county";
 
@@ -290,9 +290,9 @@ export default async function TazworksSearchDetailPage({ params, searchParams }:
   const clientGuid = query.clientGuid || "";
 
   const [search, order, applicant] = clientGuid ? await Promise.all([
-    getTazworksSearchResult(clientGuid, orderGuid, searchGuid).catch((err: unknown) => { console.error("Search result load failed", err); return null; }),
-    getTazworksOrder(clientGuid, orderGuid).catch((err: unknown) => { console.error("Order detail load failed", err); return null; }),
-    getTazworksApplicantFromOrder(clientGuid, orderGuid).catch((err: unknown) => { console.error("Applicant pull from order failed", err); return null; }),
+    getTazworksSearchResultInternal(clientGuid, orderGuid, searchGuid).catch((err: unknown) => { console.error("Search result load failed", err); return null; }),
+    getTazworksOrderInternal(clientGuid, orderGuid).catch((err: unknown) => { console.error("Order detail load failed", err); return null; }),
+    getTazworksApplicantFromOrderInternal(clientGuid, orderGuid).catch((err: unknown) => { console.error("Applicant pull from order failed", err); return null; }),
   ]) : [null, null, null];
 
   const nationalAlias = isNationalAlias(search);
@@ -304,7 +304,7 @@ export default async function TazworksSearchDetailPage({ params, searchParams }:
 
   if (nationalAlias || countyCriminal) {
     const allSearchResults = clientGuid
-      ? await getAllTazworksSearchResults(clientGuid, orderGuid).catch((err: unknown) => { console.error("Could not load all search results for identity context", err); return null; })
+      ? await getAllTazworksSearchResultsInternal(clientGuid, orderGuid).catch((err: unknown) => { console.error("Could not load all search results for identity context", err); return null; })
       : null;
     const nationalAliasSearch = findNationalAliasSearch(allSearchResults);
     aliasInformation = valueText(nationalAliasSearch?.results?.nameVariationsSearched) || formatApplicantAliases(applicant);
