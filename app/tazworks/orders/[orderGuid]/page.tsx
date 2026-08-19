@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AppHeader } from "@/components/AppHeader";
-import { getImportedTazworksSearchMap, getTazworksStatus, listTazworksOrderSearches } from "@/lib/tazworks";
+import { getImportedTazworksSearchMap, getTazworksStatus } from "@/lib/tazworks";
+import { listTazworksOrderSearchesInternal } from "@/lib/tazworksInternal";
 import { requireUser } from "@/lib/session";
 
 function clientLabel(name?: string, code?: string) {
@@ -8,7 +9,7 @@ function clientLabel(name?: string, code?: string) {
   return name || code || "Client not named";
 }
 
-export default async function TazworksOrderSearchesPage({ params, searchParams }: { params: Promise<{ orderGuid: string }>; searchParams: Promise<{ clientGuid?: string; clientName?: string; clientCode?: string; fileNumber?: string; error?: string }> }) {
+export default async function TazworksOrderSearchesPage({ searchParams, params }: { params: Promise<{ orderGuid: string }>; searchParams: Promise<{ clientGuid?: string; clientName?: string; clientCode?: string; fileNumber?: string; error?: string }> }) {
   const user = await requireUser(["admin", "supervisor", "analyzer"]);
   const { orderGuid } = await params;
   const query = await searchParams;
@@ -22,10 +23,11 @@ export default async function TazworksOrderSearchesPage({ params, searchParams }
   let error = query.error || "";
   if (clientGuid && orderGuid) {
     try {
-      const data = await listTazworksOrderSearches(clientGuid, orderGuid);
+      const data = await listTazworksOrderSearchesInternal(clientGuid, orderGuid);
       searches = Array.isArray(data) ? data : data?.content || data?.items || data?.searches || [];
       imported = await getImportedTazworksSearchMap(searches.map((row: any) => row.orderSearchGuid).filter(Boolean));
     } catch (err: any) {
+      console.error("TazWorks order search pull failed", err);
       error = err?.message || "searches_pull_failed";
     }
   }
